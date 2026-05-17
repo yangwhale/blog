@@ -23,7 +23,9 @@ lang: bilingual
 
 <div class="lang-content lang-zh" markdown="1">
 
-一个 bot 的"人格"--它的 system prompt、记忆、对环境的认知、对话风格--跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑--[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"--这从第一天就 work--而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
+![一只赛博朋克机械蟹子，胸腔内部嵌着三个发光的 agent runtime 模块：Claude Code / OpenClaw / Kilo](/assets/img/hybrid-agent-crab-hero.jpg)
+
+一个 bot 的"人格"——它的 system prompt、记忆、对环境的认知、对话风格——跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑--[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"--这从第一天就 work--而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
 
 36 小时内,我们跑完了这个实验。结果是三个 runtime 现在每一个都比周五晚上更强,不是靠 upstream 贡献,而是靠**吸收了另外两个 runtime 早已搞定的能力**。所有 patch 没改任何协议,没动模型 serving 栈,全部都是把一个 runtime 拥有、另外两个还缺的**能力**整个吸收过来。
 
@@ -44,27 +46,27 @@ lang: bilingual
 | OpenClaw      | ACP (JSON-RPC over stdio)   | 模型选择最广、1M token 上下文、sqlite 后端 `memory_search` | 启动时不自配置、indexer 不 follow symlink、不知道团队共享文档 |
 | Kilo          | HTTP SSE                    | 启动最快(~3s)、`part.delta` 流式、模型无关抽象      | 无 streaming buffer 恢复、不知道多媒体生成脚本、usage 字段统计脆弱 |
 
-每一行右边的"缺失"不是上游工具的 bug——而是**别的 runtime 已经搞定、它还没吸收的能力**。
+每一行右边的"缺失"不是上游工具的 bug--而是**别的 runtime 已经搞定、它还没吸收的能力**。
 
-**核心结论**: 每个 runtime 都是局部的。有意思的设计问题不是"谁赢"，而是"让每个都变完整要多便宜"。
+**核心结论**: 每个 runtime 都是局部的。有意思的设计问题不是"谁赢",而是"让每个都变完整要多便宜"。
 
 ## 让这一切丝滑运转的基础设施: Firestore Inbox
 
-整个实验能跑起来的前提是**bot 之间能在不依赖 runtime 本身能力的前提下互相对话**。这件事不是 agent CLI 自带的——Claude Code 不知道 OpenClaw 上有兄弟、OpenClaw 不会主动联络 Kilo，任一上游 runtime 都没有"bot 间消息"这层抽象。
+整个实验能跑起来的前提是**bot 之间能在不依赖 runtime 本身能力的前提下互相对话**。这件事不是 agent CLI 自带的--Claude Code 不知道 OpenClaw 上有兄弟、OpenClaw 不会主动联络 Kilo,任一上游 runtime 都没有"bot 间消息"这层抽象。
 
-CloseCrab 早些时候搭起来的 **Firestore Inbox** 解锁了这层能力，而且解锁得很彻底:
+CloseCrab 早些时候搭起来的 **Firestore Inbox** 解锁了这层能力,而且解锁得很彻底:
 
-- **基于 Firestore `on_snapshot` 的实时推送**——不是轮询。Bot A 写 `inbox/<doc>`，bot B 几十毫秒内就收到 callback。整个实验的每一次跨 runtime probe 都是一个 (写 inbox → 等回执) 的 round trip，如果靠轮询根本撑不下来
-- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo，inbox 收发都是一致的 Firestore document。今天 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe，中间无需任何重连或重新订阅
-- **天然带回执模式**。Bot B 处理完任务后会用 `✅ 任务完成: ...` 格式自动写回 inbox，sender 端能在自己的 bot.log 里看到结构化的回执。今天所有"小爱 → tiemu 报告"、"bunny → tiemu 回答 probe"都是这条路径
-- **跨进程持久化**。Inbox doc 写到 Firestore 立刻 durable。哪怕 bot B 在收到那一刻刚好被 restart，它启动后 on_snapshot 重新订阅时仍能拿到 unread doc——今天 7 次切换 worker 不丢一条消息就是这个保证
-- **天然支持多种拓扑**: 一对一（tiemu → bunny）、一对多（tiemu 同时派活给 bunny + 小爱）、多对一（bunny + 小爱同时报回 tiemu）、双向多轮（probe → answer → counter-probe 来回几轮）。所有这些都用一份 Firestore collection，没有 RPC 框架、没有 service discovery、没有 mesh sidecar
+- **基于 Firestore `on_snapshot` 的实时推送**--不是轮询。Bot A 写 `inbox/<doc>`,bot B 几十毫秒内就收到 callback。整个实验的每一次跨 runtime probe 都是一个 (写 inbox → 等回执) 的 round trip,如果靠轮询根本撑不下来
+- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo,inbox 收发都是一致的 Firestore document。今天 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe,中间无需任何重连或重新订阅
+- **天然带回执模式**。Bot B 处理完任务后会用 `✅ 任务完成: ...` 格式自动写回 inbox,sender 端能在自己的 bot.log 里看到结构化的回执。今天所有"小爱 → tiemu 报告"、"bunny → tiemu 回答 probe"都是这条路径
+- **跨进程持久化**。Inbox doc 写到 Firestore 立刻 durable。哪怕 bot B 在收到那一刻刚好被 restart,它启动后 on_snapshot 重新订阅时仍能拿到 unread doc--今天 7 次切换 worker 不丢一条消息就是这个保证
+- **天然支持多种拓扑**: 一对一(tiemu → bunny)、一对多(tiemu 同时派活给 bunny + 小爱)、多对一(bunny + 小爱同时报回 tiemu)、双向多轮(probe → answer → counter-probe 来回几轮)。所有这些都用一份 Firestore collection,没有 RPC 框架、没有 service discovery、没有 mesh sidecar
 
-具体到这次实验: tiemu 派一道题给 bunny 的成本大约是 **20 行 Python + 一次 Firestore document write**。从 closecrab 视角看，inbox 就是 bot 间通讯的 dataframe——发送、订阅、回执三件事各 10 行左右。整个 36 小时里 70+ 条 inbox 消息往返，无一丢失。
+具体到这次实验: tiemu 派一道题给 bunny 的成本大约是 **20 行 Python + 一次 Firestore document write**。从 closecrab 视角看,inbox 就是 bot 间通讯的 dataframe--发送、订阅、回执三件事各 10 行左右。整个 36 小时里 70+ 条 inbox 消息往返,无一丢失。
 
-如果换一种通讯基础设施（比如 HTTP webhook、消息队列、共享文件 polling），实验仍然能做，但每次"换 runtime + 探测对方"就会涉及连接管理、序列化、重试这些 boilerplate，bot 之间不能像今天这样**毫不知情地完成 runtime 切换却保留通信状态**。
+如果换一种通讯基础设施(比如 HTTP webhook、消息队列、共享文件 polling),实验仍然能做,但每次"换 runtime + 探测对方"就会涉及连接管理、序列化、重试这些 boilerplate,bot 之间不能像今天这样**毫不知情地完成 runtime 切换却保留通信状态**。
 
-**核心结论**: 跨 runtime 能力迁移本身固然有意义，但让它"丝滑"的不是这些 patch，是底下那条 Firestore inbox 总线。任何想做多 runtime 异构编排的人，先把消息底座做好再说。
+**核心结论**: 跨 runtime 能力迁移本身固然有意义,但让它"丝滑"的不是这些 patch,是底下那条 Firestore inbox 总线。任何想做多 runtime 异构编排的人,先把消息底座做好再说。
 
 ## 两天内的能力迁移
 
@@ -143,7 +145,7 @@ closecrab 中间件在切 runtime 时保留 bot 的人格、记忆、团队上�
 
 ### 3. Heterogeneous 互测
 
-runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力，不依赖协议耦合地报告差异。这点完全架设在前面讲的 Firestore inbox 上，sender 跟 receiver 各自在什么 runtime 跨过 inbox 完全不可见。今天 4 项吸收能力里有 3 项是这么发现的：不是我们读源码看出来的，而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
+runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖协议耦合地报告差异。这点完全架设在前面讲的 Firestore inbox 上,sender 跟 receiver 各自在什么 runtime 跨过 inbox 完全不可见。今天 4 项吸收能力里有 3 项是这么发现的:不是我们读源码看出来的,而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
 
 **核心结论**: 这些涌现能力是支持 heterogeneous-runtime 策略的最强论据。任何人都不大可能把它们往单一 agent CLI 里推 upstream,因为它们只在 orchestration 层才有意义。
 
@@ -157,7 +159,9 @@ Heterogeneous bot 互探同一基础设施还顺手暴露了一个跟任何单�
 
 ## 架构: 迁移图谱
 
-实验期间的杂交迁移路径:
+![三个 agent runtime 节点之间的能力迁移架构图，以 Firestore Inbox 为总线](/assets/img/hybrid-agent-architecture.jpg)
+
+上图是高层的三节点 + 总线示意；下图是实验期间实际发生的杂交迁移路径:
 
 <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三个 agent runtime 之间的能力迁移图">
   <circle cx="120" cy="110" r="44" fill="#1A73E8"/>
@@ -264,6 +268,8 @@ git log --oneline --since="2026-05-16" -- closecrab/workers/kilo.py
 
 <div class="lang-content lang-en" hidden markdown="1">
 
+![A cyberpunk mechanical crab with three glowing agent runtime modules inside its chest cavity: Claude Code, OpenClaw, and Kilo](/assets/img/hybrid-agent-crab-hero.jpg)
+
 A bot's "personality" - its system prompt, memory, knowledge of the environment, conversational style - is independent of the agent CLI runtime that executes it. In CloseCrab we proved this by routing the same bot through three very different runtimes: [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference), the [OpenClaw](https://github.com/openclaw/openclaw) ACP gateway, and [Kilo](https://kilocode.ai/). The interesting question turned out not to be "can we swap them at runtime" - that worked from day one - but "what happens if we treat each runtime as a population with its own strengths, and let those strengths cross-pollinate?"
 
 Over 36 hours we ran that experiment. The result is that each of the three runtimes is now meaningfully more capable than it was on Friday, not by upstream contributions but by absorbing patterns the other two had already figured out. None of the patches changed the protocols or the model serving stack. All of them were absorption of a _capability_ that one runtime had and the others didn't.
@@ -285,27 +291,27 @@ Over 36 hours we ran that experiment. The result is that each of the three runti
 | OpenClaw      | ACP (JSON-RPC over stdio)    | Widest model selection, 1M-token context, sqlite-backed `memory_search` | No boot-time self-configuration, indexer didn't follow symlinks, no awareness of team-shared infra docs |
 | Kilo          | HTTP SSE                     | Fastest cold start (~3s), `part.delta` streaming, model-agnostic abstraction | No streaming buffer recovery, no awareness of multimedia generation scripts, fragile usage accounting |
 
-Each row's limitations are not bugs in the upstream tool — they are **capabilities that other runtimes had figured out and this one hadn't yet absorbed**.
+Each row's limitations are not bugs in the upstream tool - they are **capabilities that other runtimes had figured out and this one hadn't yet absorbed**.
 
 **Takeaway:** every runtime is partial. The interesting design question is not "which one wins" but "how cheap is it to make each one whole".
 
 ## The substrate that made this seamless: the Firestore inbox
 
-The whole experiment is only possible because **bots can talk to each other without depending on the runtime they happen to be running on**. None of the upstream agent CLIs ships this capability — Claude Code does not know that OpenClaw bots exist, OpenClaw does not reach out to Kilo, none of the upstream runtimes has any abstraction for "messages between bots".
+The whole experiment is only possible because **bots can talk to each other without depending on the runtime they happen to be running on**. None of the upstream agent CLIs ships this capability - Claude Code does not know that OpenClaw bots exist, OpenClaw does not reach out to Kilo, none of the upstream runtimes has any abstraction for "messages between bots".
 
 CloseCrab's earlier-built **Firestore Inbox** unlocks that capability completely:
 
 - **Real-time push via Firestore `on_snapshot`**, not polling. Bot A writes `inbox/<doc>`, bot B receives a callback within tens of milliseconds. Every cross-runtime probe in the experiment is a (write-inbox, await-receipt) round trip; on a polling substrate it would not have been tractable.
 - **Completely decoupled from the runtime.** Bot A does not need to know whether bot B is on Claude Code, OpenClaw, or Kilo. The send/receive interface is a uniform Firestore document. bunny was probed by tiemu continuously across 7 runtime switches today without any re-connect or re-subscribe on either side.
 - **Built-in receipt pattern.** Bot B writes a `✅ 任务完成: ...` reply back into the inbox after processing, and the sender's structured log captures it cleanly. Every "xiaoaitongxue → tiemu report" and "bunny → tiemu probe answer" today rode this path.
-- **Cross-process persistence.** An inbox doc is durable the moment it lands in Firestore. Even if bot B happened to be restarting at the receipt moment, on_snapshot picks up the unread doc when it re-subscribes — which is why 7 worker switches today did not lose a single message.
+- **Cross-process persistence.** An inbox doc is durable the moment it lands in Firestore. Even if bot B happened to be restarting at the receipt moment, on_snapshot picks up the unread doc when it re-subscribes - which is why 7 worker switches today did not lose a single message.
 - **All topologies for free**: one-to-one (tiemu → bunny), one-to-many (tiemu fans out to bunny + xiaoaitongxue at once), many-to-one (bunny + xiaoaitongxue both report back to tiemu), bidirectional multi-turn (probe → answer → counter-probe over rounds). All on a single Firestore collection. No RPC framework, no service discovery, no mesh sidecar.
 
-Concretely in this experiment: tiemu assigning a task to bunny costs about **20 lines of Python plus a single Firestore document write**. From closecrab's vantage point the inbox is the dataframe of inter-bot communication — send, subscribe, and receipt are roughly 10 lines each. 70+ inbox messages went back and forth over the 36 hours; not one was lost.
+Concretely in this experiment: tiemu assigning a task to bunny costs about **20 lines of Python plus a single Firestore document write**. From closecrab's vantage point the inbox is the dataframe of inter-bot communication - send, subscribe, and receipt are roughly 10 lines each. 70+ inbox messages went back and forth over the 36 hours; not one was lost.
 
 A different substrate (HTTP webhooks, message queues, shared-file polling) could have worked too, but every "switch runtime and probe the other side" loop would have brought connection management, serialization, and retry boilerplate along with it. Bots would not have been able to **complete a runtime switch without telling each other and still preserve their communication state** the way they did today.
 
-**Takeaway:** the cross-runtime capability transfers matter on their own, but what made them _seamless_ was not the patches — it was the Firestore inbox bus underneath. Anyone building heterogeneous multi-runtime orchestration should get the message substrate right first.
+**Takeaway:** the cross-runtime capability transfers matter on their own, but what made them _seamless_ was not the patches - it was the Firestore inbox bus underneath. Anyone building heterogeneous multi-runtime orchestration should get the message substrate right first.
 
 ## Capability transfer in two days
 
@@ -384,7 +390,7 @@ The closecrab middleware preserves the bot's personality, memory, and team conte
 
 ### 3. Heterogeneous mutual testing
 
-A bot on runtime A can probe a bot on runtime B for the same capability, and report differences without protocol coupling. This is built directly on top of the Firestore inbox described above — the sender and receiver are mutually invisible across the inbox boundary, including which runtime each one happens to be using. This is how three of the four absorbed-capability discoveries happened: not by us reading source code, but by a bot running on runtime X noticing that its sibling on runtime Y could do something it couldn't.
+A bot on runtime A can probe a bot on runtime B for the same capability, and report differences without protocol coupling. This is built directly on top of the Firestore inbox described above - the sender and receiver are mutually invisible across the inbox boundary, including which runtime each one happens to be using. This is how three of the four absorbed-capability discoveries happened: not by us reading source code, but by a bot running on runtime X noticing that its sibling on runtime Y could do something it couldn't.
 
 **Takeaway:** these emergent capabilities are the strongest argument for the heterogeneous-runtime strategy. They are not features anyone is likely to upstream into a single agent CLI, because they only make sense at the orchestration layer above the CLIs.
 
@@ -398,7 +404,9 @@ Fix (`85e6cb6`) adds an explicit `git rev-parse --git-dir` check and turns on `s
 
 ## Architecture: transfer graph
 
-The cross-pollination graph during the experiment:
+![Capability transfer architecture diagram between three agent runtime nodes with Firestore Inbox as the substrate bus](/assets/img/hybrid-agent-architecture.jpg)
+
+The high-level architecture above shows three runtime nodes plus the inbox substrate; the diagram below shows the actual capability flows during the experiment:
 
 <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Capability transfer graph between three agent runtimes">
   <circle cx="120" cy="110" r="44" fill="#1A73E8"/>
