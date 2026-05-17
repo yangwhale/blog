@@ -27,20 +27,20 @@ lang: bilingual
 
 一个 bot 的"人格"——它的 system prompt、记忆、对环境的认知、对话风格——跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑--[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"--这从第一天就 work--而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
 
-36 小时内,我们跑完了这个实验。结果是三个 runtime 现在每一个都比周五晚上更强,不是靠 upstream 贡献,而是靠**吸收了另外两个 runtime 早已搞定的能力**。所有 patch 没改任何协议,没动模型 serving 栈,全部都是把一个 runtime 拥有、另外两个还缺的**能力**整个吸收过来。
+36 小时内,我们跑完了这个实验。结果是三个 runtime 现在每一个都比实验开始时更强,不是靠 upstream 贡献,而是靠**吸收了另外两个 runtime 早已搞定的能力**。所有 patch 没改任何协议,没动模型 serving 栈,全部都是把一个 runtime 拥有、另外两个还缺的**能力**整个吸收过来。
 
 ## TL;DR
 
 - 三个 runtime 各有看家本事,谁都不是严格最强
-- 36 小时跨物种杂交之后,每个 runtime 都吸收了 2-10 项原本没有的能力,**每一个都比周五版本严格更强**
+- 36 小时跨 runtime 互相吸收能力之后,每个 runtime 都吸收了 2-10 项原本没有的能力,**每一个都比起始版本严格更强**
 - 除了单一 runtime 的能力增益之外,还出现了一组**涌现能力**--它们只在三个 runtime 共存时才存在,任何单一 runtime 都没有
-- 杂交循环成本很低(每项能力 ~15 分钟),按探测对数量线性扩展
+- 杂交循环成本很低(每项能力 ~15 分钟),随 probing 对数量线性增长
 
 **核心结论**: 把多个 agent CLI runtime 当作一个有差异的种群,在它们之间定向迁移能力,比选一个"最优 runtime"独立优化产生更强的生态。
 
 ## 三个 runtime 各自的看家本事
 
-| Runtime       | 通信方式                    | 原生看家本事                                       | 周五版本缺失的能力                                          |
+| Runtime       | 通信方式                    | 原生强项                                       | 实验开始时缺失的能力                                          |
 | ------------- | --------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
 | Claude Code   | Unix socketpair + stream-JSON | 工具集最丰富、原生并发 `tool_use`、stream-JSON 事件模型成熟 | 空回复无重试、subprocess 侧 tempfile 泄漏、无语义记忆索引 |
 | OpenClaw      | ACP (JSON-RPC over stdio)   | 模型选择最广、1M token 上下文、sqlite 后端 `memory_search` | 启动时不自配置、indexer 不 follow symlink、不知道团队共享文档 |
@@ -57,18 +57,18 @@ lang: bilingual
 CloseCrab 早些时候搭起来的 **Firestore Inbox** 解锁了这层能力,而且解锁得很彻底:
 
 - **基于 Firestore `on_snapshot` 的实时推送**--不是轮询。Bot A 写 `inbox/<doc>`,bot B 几十毫秒内就收到 callback。整个实验的每一次跨 runtime probe 都是一个 (写 inbox → 等回执) 的 round trip,如果靠轮询根本撑不下来
-- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo,inbox 收发都是一致的 Firestore document。今天 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe,中间无需任何重连或重新订阅
-- **天然带回执模式**。Bot B 处理完任务后会用 `✅ 任务完成: ...` 格式自动写回 inbox,sender 端能在自己的 bot.log 里看到结构化的回执。今天所有"小爱 → tiemu 报告"、"bunny → tiemu 回答 probe"都是这条路径
-- **跨进程持久化**。Inbox doc 写到 Firestore 立刻 durable。哪怕 bot B 在收到那一刻刚好被 restart,它启动后 on_snapshot 重新订阅时仍能拿到 unread doc--今天 7 次切换 worker 不丢一条消息就是这个保证
+- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo,inbox 收发都是一致的 Firestore document。实验期间 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe,中间无需任何重连或重新订阅
+- **天然带回执模式**。Bot B 处理完任务后会用 `✅ 任务完成: ...` 格式自动写回 inbox,sender 端能在自己的 bot.log 里看到结构化的回执。实验期间所有"小爱 → tiemu 报告"、"bunny → tiemu 回答 probe"都是这条路径
+- **跨进程持久化**。Inbox doc 写到 Firestore 立刻 durable。哪怕 bot B 在收到那一刻刚好被 restart,它启动后 on_snapshot 重新订阅时仍能拿到 unread doc--实验中 7 次切换 worker 不丢一条消息就是这个保证
 - **天然支持多种拓扑**: 一对一(tiemu → bunny)、一对多(tiemu 同时派活给 bunny + 小爱)、多对一(bunny + 小爱同时报回 tiemu)、双向多轮(probe → answer → counter-probe 来回几轮)。所有这些都用一份 Firestore collection,没有 RPC 框架、没有 service discovery、没有 mesh sidecar
 
 具体到这次实验: tiemu 派一道题给 bunny 的成本大约是 **20 行 Python + 一次 Firestore document write**。从 closecrab 视角看,inbox 就是 bot 间通讯的 dataframe--发送、订阅、回执三件事各 10 行左右。整个 36 小时里 70+ 条 inbox 消息往返,无一丢失。
 
-如果换一种通讯基础设施(比如 HTTP webhook、消息队列、共享文件 polling),实验仍然能做,但每次"换 runtime + 探测对方"就会涉及连接管理、序列化、重试这些 boilerplate,bot 之间不能像今天这样**毫不知情地完成 runtime 切换却保留通信状态**。
+如果换一种通讯基础设施(比如 HTTP webhook、消息队列、共享文件 polling),实验仍然能做,但每次"换 runtime + 探测对方"就会涉及连接管理、序列化、重试这些 boilerplate,bot 之间不能像实验里这样**毫不知情地完成 runtime 切换却保留通信状态**。
 
 **核心结论**: 跨 runtime 能力迁移本身固然有意义,但让它"丝滑"的不是这些 patch,是底下那条 Firestore inbox 总线。任何想做多 runtime 异构编排的人,先把消息底座做好再说。
 
-## 两天内的能力迁移
+## 36 小时内的能力迁移
 
 ### Claude Code 吸收的能力
 
@@ -102,7 +102,7 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | 跨主机团队基础设施文档自动同步(9 个文档)                          | 借鉴自 Kilo 的 `memory-guide.md` auto-load 思路        | `fdbe7a7` |
 | Retry 路径的 streaming buffer 一致性(step buffer + flush)         | 镜像 Kilo 的 `part.delta` flush 纪律                  | `e72c62e` |
 
-收益最大的一段。OpenClaw 自带最 sophisticated 的 memory 搜索(真的 sqlite 向量索引 + `memory_search` 作为 tool),但 workspace 配置很脆弱--indexer 不 follow symlink,所以即使 `memory/` 是正确 symlink,bot 出厂时的索引是空的。Hardlink 修复改用同 inode 的 hardlink(同文件系统),跨文件系统的 GCS shared 用 `shutil.copyfile` 同步。修复前: 0/0 files。修复后: 101/101 files、282 chunks、语义搜索分数 ≥ 0.78 命中之前 runtime 完全看不见的内容。
+收益最大的一段。OpenClaw 自带最成熟的语义记忆索引(真的 sqlite 向量索引 + `memory_search` 作为 tool),但 workspace 配置很脆弱--indexer 不 follow symlink,所以即使 `memory/` 是正确 symlink,bot 出厂时的索引是空的。Hardlink 修复改用同 inode 的 hardlink(同文件系统),跨文件系统的 GCS shared 用 `shutil.copyfile` 同步。修复前: 0/0 files。修复后: 101/101 files、282 chunks、语义搜索分数 ≥ 0.78 命中之前 runtime 完全看不见的内容。
 
 `agents.list` 自愈长期看更有价值: 之前把任何新 bot 切到 OpenClaw 需要手动编辑 config,现在零手工--bot 第一次启动时把自己的条目写进 gateway config。
 
@@ -119,7 +119,7 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | 多媒体生成脚本(`imagen` / `tts`)的认知                  | Discoverability 早在 Claude Code workspace        | `1286279`    |
 | Usage 统计一致性(input / output / cache tokens)         | OpenClaw usage 追踪                               | `0bd1daf`    |
 
-最 heterogeneous 的一组,反映 Kilo 是三者里最年轻、距 production 距离最远的。这些没有任何一项是 Kilo upstream 贡献--都是 closecrab 这层 wrapper 教 Kilo 如何使用 Claude Code 和 OpenClaw bot 已经用了好几周的设施。结果是 Kilo 不再是"试验"runtime--它在 head-to-head 延迟比较里现在能赢另外两个(见下面 "压力测试")。
+最杂的一组,反映 Kilo 是三者里最年轻、距 production 距离最远的。这些没有任何一项是 Kilo upstream 贡献--都是 closecrab 这层 wrapper 教 Kilo 如何使用 Claude Code 和 OpenClaw bot 已经用了好几周的设施。结果是 Kilo 不再是"试验"runtime--它在 head-to-head 延迟比较里现在能赢另外两个(见下面 "压力测试")。
 
 **核心结论**: 最便宜的能力迁移就是源 runtime 已经把问题解决、目标 runtime 只需要被**告知方案存在**的那种。工具感知、脚本感知、prompt 规则吸收--对 Kilo 都是单 commit 收益。
 
@@ -143,19 +143,19 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 
 closecrab 中间件在切 runtime 时保留 bot 的人格、记忆、团队上下文。一个 bot 在 20 秒内能在 Claude Code、OpenClaw、Kilo 之间移动,不丢失任何长期记忆、不需要手工重配。Runtime 特定的自愈(OpenClaw 的 hardlink + reindex、Kilo 的 HTTP server spawn、Claude Code 的 session resume)自动跑。
 
-### 3. Heterogeneous 互测
+### 3. 异构互测
 
-runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖协议耦合地报告差异。这点完全架设在前面讲的 Firestore inbox 上,sender 跟 receiver 各自在什么 runtime 跨过 inbox 完全不可见。今天 4 项吸收能力里有 3 项是这么发现的:不是我们读源码看出来的,而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
+runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖协议耦合地报告差异。这点完全架设在前面讲的 Firestore inbox 上,sender 跟 receiver 各自在什么 runtime 跨过 inbox 完全不可见。本次实验 4 项吸收能力里有 3 项是这么发现的:不是我们读源码看出来的,而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
 
-**核心结论**: 这些涌现能力是支持 heterogeneous-runtime 策略的最强论据。任何人都不大可能把它们往单一 agent CLI 里推 upstream,因为它们只在 orchestration 层才有意义。
+**核心结论**: 这些涌现能力是支持 异构 runtime 策略的最强论据。任何人都不大可能把它们往单一 agent CLI 里推 upstream,因为它们只在 orchestration 层才有意义。
 
 ## 一个副产品发现: 静默的备份回退
 
-Heterogeneous bot 互探同一基础设施还顺手暴露了一个跟任何单一 runtime 都无关的基建层问题。`scripts/sync-memory.sh` 在一台机器上跑,但 `~/my-private` 是 rsync 目标而非真 git clone。`cd $REPO || exit 1` 守卫通过了(目录存在),然后 git 命令静默失败因为没 `set -e`,最后还打印 `"Pushed to GitHub (private)"`。**memory 备份连续几周静默失败**。
+异构 bot 互探同一基础设施还顺手暴露了一个跟任何单一 runtime 都无关的基建层问题。`scripts/sync-memory.sh` 在一台机器上跑,但 `~/my-private` 是 rsync 目标而非真 git clone。`cd $REPO || exit 1` 守卫通过了(目录存在),然后 git 命令静默失败因为没 `set -e`,最后还打印 `"Pushed to GitHub (private)"`。**memory 备份连续几周静默失败**。
 
 修复(`85e6cb6`)加了显式 `git rev-parse --git-dir` 检查,开了 `set -e` 任一 git 失败就 abort。这是 36 小时里最高价值的 commit,且不是任何意义上的 runtime feature--能发现是因为不同 runtime 看同一基础设施有不同视角,其中一个注意到了不一致。
 
-**核心结论**: 静默成功是最贵的一类 bug,而且当单一观察者的假设跟静默路径吻合时极难发现。Heterogeneous 观察者是被低估的 debug 工具。
+**核心结论**: 静默成功是最贵的一类 bug,而且当单一观察者的假设跟静默路径吻合时极难发现。异构观察者是被低估的 debug 工具。
 
 ## 架构: 迁移图谱
 
@@ -197,7 +197,7 @@ Heterogeneous bot 互探同一基础设施还顺手暴露了一个跟任何单�
 | Cycle | 方向                | Model 自动翻译 | Bot 启动 | 探针内容                                      | 回复长度  |
 | ----- | ------------------- | -------------- | -------- | --------------------------------------------- | --------- |
 | 1     | claude → openclaw   | yes            | yes      | B200 MIG template 名(来自 `shared/gcp-infra.md`)| 141 字符 |
-| 2     | openclaw → claude   | yes            | yes      | ALModel optimizer(来自 `shared/tpu-training.md`)| 615 字符 |
+| 36 小时     | openclaw → claude   | yes            | yes      | ALModel optimizer(来自 `shared/tpu-training.md`)| 615 字符 |
 | 3     | claude → kilo       | yes            | yes      | 飞书 column_set 限制(来自 `shared/feishu-bot.md`)| 116 字符 |
 | 4     | kilo → claude       | yes            | yes      | CC 核心模块(来自 `shared/architecture.md`)     | 851 字符 |
 
@@ -209,17 +209,17 @@ Heterogeneous bot 互探同一基础设施还顺手暴露了一个跟任何单�
 | Claude Code | 单个 parallel tool_use block 里 3 个 `Grep`         | 42.66s  |
 | Kilo        | `bash` × 3,串行                                    | ~37s    |
 
-Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude Code,尽管周初它是三个 runtime 里最不成熟的。这个提升几乎完全来自吸收的能力(streaming flush、tool 批处理规则、原生 cold start 速度保留)。
+Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude Code,尽管实验开始时它是三个 runtime 里最不成熟的。这个提升几乎完全来自吸收的能力(streaming flush、tool 批处理规则、原生 cold start 速度保留)。
 
 ## 数据
 
 | 指标                                | 值                  |
 | ----------------------------------- | -------------------- |
-| 天数                                | 2                    |
+| 实验时长                            | 36 小时              |
 | Runtime 数                          | 3                    |
 | Closecrab commits                   | 61                   |
 | 增删行数                            | +5,070 / -568        |
-| Claude Code 吸收的能力              | 2                    |
+| Claude Code 吸收的能力              | 36 小时                    |
 | OpenClaw 吸收的能力                 | 5                    |
 | Kilo 吸收的能力                     | 10                   |
 | 涌现能力                            | 3                    |
@@ -231,9 +231,9 @@ Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude 
 
 ## 我们刻意不做的事
 
-- 不引入对三个 runtime 的统一抽象层。每个保留自己 idiomatic 的表面,只有 closecrab 中间件和运维工具理解全部三个。整个实验的意义就是**保留 runtime 的多样性**
+- 不引入对三个 runtime 的统一抽象层。每个保留自己原生的接口风格,只有 closecrab 中间件和运维工具理解全部三个。整个实验的意义就是**保留 runtime 的多样性**
 - 不自动化能力迁移循环本身。每次迁移都是人触发的--读一个 runtime 的 commit history 然后在另一个 runtime 上发定向 probe。自动化技术上很直接,但只有三个 runtime 在 scope 内时为时尚早
-- 不修改任何 runtime 的协议。协议跟周五一模一样,所有改动都在 closecrab wrapper 层或者 per-runtime worker 里的自愈 patch
+- 不修改任何 runtime 的协议。协议跟实验前一模一样,所有改动都在 closecrab wrapper 层或者 per-runtime worker 里的自愈 patch
 
 **核心结论**: 实验 work 是因为我们让 runtime 保持独立、用很轻的"只观察"循环连接它们。同质化风险--让三个 runtime 收敛成一个形状--是真实的,随着策略成熟我们需要明确策略避免。
 
@@ -243,7 +243,7 @@ Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude 
 
 - **多样性是 feature 不是过渡债**。三个 runtime 同时观察同一基础设施发现了任一单一 runtime 都不会发现的 bug
 - **能力迁移很便宜**。大多数收益是单 commit 移植结构类似的逻辑
-- **涌现能力自付回报**。跨 runtime model 翻译、运行时切换、heterogeneous probing 全都是只因为 heterogeneity 才存在的 feature
+- **涌现能力本身就值回成本**。跨 runtime model 翻译、运行时切换、异构互测 全都是只因为 异构性才存在的 feature
 
 我们会保留全部三个 runtime 在生产、继续在三个 runtime 上跑同一 bot 人格、把新 runtime 当作吸收新能力的机会而不是取代既有的候选。
 
@@ -262,7 +262,7 @@ git log --oneline --since="2026-05-16" -- closecrab/workers/kilo.py
 
 ## 致谢
 
-实验跑在一个团队 4 个 bot 上。其中三个--bunny(主跑 Claude Code)、tiemu(主跑 OpenClaw)、xiaoaitongxue(主跑 Kilo)--轮流互测和提交吸收来的能力。第四个,bot 间 Firestore inbox,严格意义上没跑任何代码,但确实当之无愧地拿到了一个 thank-you--在当天的重启压力下没丢一条消息。
+实验跑在一个团队 4 个 bot 上。其中三个--bunny(主跑 Claude Code)、tiemu(主跑 OpenClaw)、xiaoaitongxue(主跑 Kilo)--轮流互测和提交吸收来的能力。第四个,bot 间 Firestore inbox,严格意义上没跑任何代码,但确实当之无愧地值得一句感谢--在 36 小时实验期间的重启压力下没丢一条消息。
 
 </div>
 
@@ -272,12 +272,12 @@ git log --oneline --since="2026-05-16" -- closecrab/workers/kilo.py
 
 A bot's "personality" - its system prompt, memory, knowledge of the environment, conversational style - is independent of the agent CLI runtime that executes it. In CloseCrab we proved this by routing the same bot through three very different runtimes: [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference), the [OpenClaw](https://github.com/openclaw/openclaw) ACP gateway, and [Kilo](https://kilocode.ai/). The interesting question turned out not to be "can we swap them at runtime" - that worked from day one - but "what happens if we treat each runtime as a population with its own strengths, and let those strengths cross-pollinate?"
 
-Over 36 hours we ran that experiment. The result is that each of the three runtimes is now meaningfully more capable than it was on Friday, not by upstream contributions but by absorbing patterns the other two had already figured out. None of the patches changed the protocols or the model serving stack. All of them were absorption of a _capability_ that one runtime had and the others didn't.
+Over 36 hours we ran that experiment. The result is that each of the three runtimes is now meaningfully more capable than at the start of the experiment, not by upstream contributions but by absorbing patterns the other two had already figured out. None of the patches changed the protocols or the model serving stack. All of them were absorption of a _capability_ that one runtime had and the others didn't.
 
 ## TL;DR
 
 - Each of the three runtimes ships native strengths none of the others has. None of them is strictly best.
-- After 36 hours of cross-pollination, each runtime gained between 2 and 10 new capabilities ported from the other two. Result: every runtime is now strictly better than its Friday-night self.
+- After 36 hours of cross-pollination, each runtime gained between 2 and 10 new capabilities ported from the other two. Result: every runtime is now strictly better than its starting-point self.
 - Beyond per-runtime gains, a small set of **emergent capabilities** appeared that no single runtime had - they only exist because three runtimes coexist.
 - The cross-pollination loop is cheap (~15 minutes per absorbed capability) and scales linearly with the number of probing pairs.
 
@@ -285,7 +285,7 @@ Over 36 hours we ran that experiment. The result is that each of the three runti
 
 ## The three runtimes and their native strengths
 
-| Runtime       | Transport                    | Native strength                                 | Native limitation (Friday)                          |
+| Runtime       | Transport                    | Native strength                                 | Native limitation (at experiment start)                          |
 | ------------- | ---------------------------- | ----------------------------------------------- | --------------------------------------------------- |
 | Claude Code   | Unix socketpair + stream-JSON | Richest tool surface, native parallel `tool_use`, mature stream-JSON event model | No retry on empty response, leaked process-side tempfiles, no semantic memory index |
 | OpenClaw      | ACP (JSON-RPC over stdio)    | Widest model selection, 1M-token context, sqlite-backed `memory_search` | No boot-time self-configuration, indexer didn't follow symlinks, no awareness of team-shared infra docs |
@@ -302,14 +302,14 @@ The whole experiment is only possible because **bots can talk to each other with
 CloseCrab's earlier-built **Firestore Inbox** unlocks that capability completely:
 
 - **Real-time push via Firestore `on_snapshot`**, not polling. Bot A writes `inbox/<doc>`, bot B receives a callback within tens of milliseconds. Every cross-runtime probe in the experiment is a (write-inbox, await-receipt) round trip; on a polling substrate it would not have been tractable.
-- **Completely decoupled from the runtime.** Bot A does not need to know whether bot B is on Claude Code, OpenClaw, or Kilo. The send/receive interface is a uniform Firestore document. bunny was probed by tiemu continuously across 7 runtime switches today without any re-connect or re-subscribe on either side.
-- **Built-in receipt pattern.** Bot B writes a `✅ 任务完成: ...` reply back into the inbox after processing, and the sender's structured log captures it cleanly. Every "xiaoaitongxue → tiemu report" and "bunny → tiemu probe answer" today rode this path.
-- **Cross-process persistence.** An inbox doc is durable the moment it lands in Firestore. Even if bot B happened to be restarting at the receipt moment, on_snapshot picks up the unread doc when it re-subscribes - which is why 7 worker switches today did not lose a single message.
+- **Completely decoupled from the runtime.** Bot A does not need to know whether bot B is on Claude Code, OpenClaw, or Kilo. The send/receive interface is a uniform Firestore document. bunny was probed by tiemu continuously across 7 runtime switches during the experiment without any re-connect or re-subscribe on either side.
+- **Built-in receipt pattern.** Bot B writes a `✅ 任务完成: ...` reply back into the inbox after processing, and the sender's structured log captures it cleanly. Every "xiaoaitongxue → tiemu report" and "bunny → tiemu probe answer" during the experiment rode this path.
+- **Cross-process persistence.** An inbox doc is durable the moment it lands in Firestore. Even if bot B happened to be restarting at the receipt moment, on_snapshot picks up the unread doc when it re-subscribes - which is why 7 worker switches during the experiment did not lose a single message.
 - **All topologies for free**: one-to-one (tiemu → bunny), one-to-many (tiemu fans out to bunny + xiaoaitongxue at once), many-to-one (bunny + xiaoaitongxue both report back to tiemu), bidirectional multi-turn (probe → answer → counter-probe over rounds). All on a single Firestore collection. No RPC framework, no service discovery, no mesh sidecar.
 
 Concretely in this experiment: tiemu assigning a task to bunny costs about **20 lines of Python plus a single Firestore document write**. From closecrab's vantage point the inbox is the dataframe of inter-bot communication - send, subscribe, and receipt are roughly 10 lines each. 70+ inbox messages went back and forth over the 36 hours; not one was lost.
 
-A different substrate (HTTP webhooks, message queues, shared-file polling) could have worked too, but every "switch runtime and probe the other side" loop would have brought connection management, serialization, and retry boilerplate along with it. Bots would not have been able to **complete a runtime switch without telling each other and still preserve their communication state** the way they did today.
+A different substrate (HTTP webhooks, message queues, shared-file polling) could have worked too, but every "switch runtime and probe the other side" loop would have brought connection management, serialization, and retry boilerplate along with it. Bots would not have been able to **complete a runtime switch without telling each other and still preserve their communication state** the way they did during this experiment.
 
 **Takeaway:** the cross-runtime capability transfers matter on their own, but what made them _seamless_ was not the patches - it was the Firestore inbox bus underneath. Anyone building heterogeneous multi-runtime orchestration should get the message substrate right first.
 
@@ -442,7 +442,7 @@ Take one bot and cycle its runtime in a tight loop, with a shared-memory query a
 | Cycle | Direction           | Model translated | Bot booted | Probe content                                  | Reply length |
 | ----- | ------------------- | ---------------- | ---------- | ---------------------------------------------- | ------------ |
 | 1     | claude → openclaw   | yes              | yes        | B200 MIG template name (from `shared/gcp-infra.md`) | 141 chars    |
-| 2     | openclaw → claude   | yes              | yes        | ALModel optimizer (from `shared/tpu-training.md`)   | 615 chars    |
+| 36 小时     | openclaw → claude   | yes              | yes        | ALModel optimizer (from `shared/tpu-training.md`)   | 615 chars    |
 | 3     | claude → kilo       | yes              | yes        | Feishu column_set limitation (from `shared/feishu-bot.md`) | 116 chars |
 | 4     | kilo → claude       | yes              | yes        | CC core modules (from `shared/architecture.md`)     | 851 chars    |
 
@@ -460,11 +460,11 @@ The Kilo time is the surprise: in absolute terms it now beats Claude Code on thi
 
 | Metric                                  | Value                |
 | --------------------------------------- | -------------------- |
-| Days                                    | 2                    |
+| Days                                    | 36 小时                    |
 | Runtimes                                | 3                    |
 | Closecrab commits                       | 61                   |
 | Lines added / removed                   | +5,070 / -568        |
-| Capabilities transferred (Claude Code)  | 2                    |
+| Capabilities transferred (Claude Code)  | 36 小时                    |
 | Capabilities transferred (OpenClaw)     | 5                    |
 | Capabilities transferred (Kilo)         | 10                   |
 | Emergent capabilities                   | 3                    |
@@ -478,7 +478,7 @@ The Kilo time is the surprise: in absolute terms it now beats Claude Code on thi
 
 - We did not introduce a unified abstraction layer over the three runtimes. Each one keeps its idiomatic surface; only the closecrab middleware and the operational tooling understand all three. The whole point of the experiment was to preserve runtime diversity.
 - We did not automate the capability-transfer loop. Each transfer was a human-initiated read of one runtime's commit history followed by a directed probe on another runtime. Automation is straightforward but premature with only three runtimes in scope.
-- We did not change any of the runtime wire protocols. The protocols are exactly where they were on Friday; everything we changed lives in the closecrab wrapper layer or in self-healing patches inside the per-runtime workers.
+- We did not change any of the runtime wire protocols. The protocols are exactly where they were at the start of the experiment; everything we changed lives in the closecrab wrapper layer or in self-healing patches inside the per-runtime workers.
 
 **Takeaway:** the experiment worked because we kept the runtimes independent and used cheap observation-only loops between them. The homogenization risk - making three runtimes converge into a single shape - is real and we will need a deliberate policy to avoid it as the strategy matures.
 
@@ -488,7 +488,7 @@ Pre-experiment, the implicit assumption was that one would eventually pick a "be
 
 - **Diversity is a feature, not transitional debt.** Three runtimes observing the same infrastructure found bugs no single runtime would have found.
 - **Capability transfer is cheap.** Most of the gains were single-commit ports of structurally-similar logic.
-- **Emergent capabilities pay for themselves.** Cross-runtime model translation, live runtime switching, and heterogeneous probing are all features that exist only because of the heterogeneity.
+- **Emergent capabilities pay for themselves.** Cross-runtime model translation, live runtime switching, and 异构互测 are all features that exist only because of the heterogeneity.
 
 We will keep all three runtimes in production, continue running the same bot personalities across all three, and treat new runtimes as opportunities to absorb new capabilities rather than as candidates to displace existing ones.
 
