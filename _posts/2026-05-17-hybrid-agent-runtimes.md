@@ -313,7 +313,36 @@ A different substrate (HTTP webhooks, message queues, shared-file polling) could
 
 **Takeaway:** the cross-runtime capability transfers matter on their own, but what made them _seamless_ was not the patches - it was the Firestore inbox bus underneath. Anyone building heterogeneous multi-runtime orchestration should get the message substrate right first.
 
-## Capability transfer in two days
+## Same-host collaboration: not just messages, but full system access
+
+![Same-host bot interaction: code editing + log reading + process restart + Firestore Inbox messaging](/assets/img/same-host-interaction.jpg)
+
+The Firestore inbox solves bot-to-bot message passing, but the speed at which capability transfer happened in this experiment has another prerequisite: **all bots run on the same host machine, sharing a filesystem and process space**. This means one bot modifying another can do three things that a message bus alone cannot:
+
+### 1. Edit the other bot's code directly
+
+All bots share the `~/CloseCrab/` repository. tiemu can `edit closecrab/workers/claude_code.py` to add empty-response retry to bunny — no pull request, no merge, no waiting for another bot to review. After `git commit && git push`, the code is in the shared repo. All 61 commits in this experiment took this path.
+
+### 2. Read the other bot's runtime logs in real time
+
+`tail -f ~/.claude/closecrab/bunny/bot.log` shows exactly what bunny is doing: which tools are being called, what the model returned, whether errors occurred. During this experiment, tiemu diagnosed bunny's empty-response issue, confirmed Kilo's `Model not found` error, and verified startup self-heal log output — all by `grep bot.log` before touching any code. This is 10x faster than asking through the inbox "what just happened to you?".
+
+### 3. Restart the other bot's process at will
+
+`scripts/launcher.sh restart bunny` loads new code instantly. bunny was restarted 10+ times during this experiment — after every patch, an immediate restart to verify, forming a tight "edit code → restart → send inbox probe → check result → edit again" loop of roughly 3 minutes per cycle.
+
+These three capabilities combined with the Firestore inbox's message bus form the complete bot-to-bot collaboration infrastructure:
+
+| Capability | Mechanism | Usage in this experiment |
+|---|---|---|
+| Message passing | Firestore inbox (`on_snapshot` real-time push) | 70+ messages |
+| Code modification | Shared filesystem + git | 61 commits |
+| Log diagnosis | `tail/grep bot.log` | Every debug cycle |
+| Process restart | `launcher.sh restart <bot>` | 10+ times |
+
+**Takeaway:** if bots were distributed across different machines, code edits and process restarts would become remote operations (ssh + rsync + remote kill), and iteration speed would drop by an order of magnitude. Same-host deployment is the prerequisite that made this experiment completable in 36 hours.
+
+## Capability transfer in 36 hours
 
 ### Capabilities Claude Code absorbed
 
