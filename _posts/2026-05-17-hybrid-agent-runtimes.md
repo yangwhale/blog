@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Hybrid agent runtimes: how Claude Code, OpenClaw, and Kilo grew into each other's strengths"
-date: 2026-05-17 19:30:00 +0800
+date: 2026-05-17 10:43:03 +0000
 categories: [agents, infra]
 ---
 
