@@ -23,7 +23,7 @@ lang: bilingual
 
 <div class="lang-content lang-zh" markdown="1">
 
-一个 bot 的"人格"——它的 system prompt、记忆、对环境的认知、对话风格——跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑——[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"——这从第一天就 work——而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
+一个 bot 的"人格"--它的 system prompt、记忆、对环境的认知、对话风格--跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑--[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"--这从第一天就 work--而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
 
 36 小时内,我们跑完了这个实验。结果是三个 runtime 现在每一个都比周五晚上更强,不是靠 upstream 贡献,而是靠**吸收了另外两个 runtime 早已搞定的能力**。所有 patch 没改任何协议,没动模型 serving 栈,全部都是把一个 runtime 拥有、另外两个还缺的**能力**整个吸收过来。
 
@@ -31,7 +31,7 @@ lang: bilingual
 
 - 三个 runtime 各有看家本事,谁都不是严格最强
 - 36 小时跨物种杂交之后,每个 runtime 都吸收了 2-10 项原本没有的能力,**每一个都比周五版本严格更强**
-- 除了单一 runtime 的能力增益之外,还出现了一组**涌现能力**——它们只在三个 runtime 共存时才存在,任何单一 runtime 都没有
+- 除了单一 runtime 的能力增益之外,还出现了一组**涌现能力**--它们只在三个 runtime 共存时才存在,任何单一 runtime 都没有
 - 杂交循环成本很低(每项能力 ~15 分钟),按探测对数量线性扩展
 
 **核心结论**: 把多个 agent CLI runtime 当作一个有差异的种群,在它们之间定向迁移能力,比选一个"最优 runtime"独立优化产生更强的生态。
@@ -46,7 +46,25 @@ lang: bilingual
 
 每一行右边的"缺失"不是上游工具的 bug——而是**别的 runtime 已经搞定、它还没吸收的能力**。
 
-**核心结论**: 每个 runtime 都是局部的。有意思的设计问题不是"谁赢",而是"让每个都变完整要多便宜"。
+**核心结论**: 每个 runtime 都是局部的。有意思的设计问题不是"谁赢"，而是"让每个都变完整要多便宜"。
+
+## 让这一切丝滑运转的基础设施: Firestore Inbox
+
+整个实验能跑起来的前提是**bot 之间能在不依赖 runtime 本身能力的前提下互相对话**。这件事不是 agent CLI 自带的——Claude Code 不知道 OpenClaw 上有兄弟、OpenClaw 不会主动联络 Kilo，任一上游 runtime 都没有"bot 间消息"这层抽象。
+
+CloseCrab 早些时候搭起来的 **Firestore Inbox** 解锁了这层能力，而且解锁得很彻底:
+
+- **基于 Firestore `on_snapshot` 的实时推送**——不是轮询。Bot A 写 `inbox/<doc>`，bot B 几十毫秒内就收到 callback。整个实验的每一次跨 runtime probe 都是一个 (写 inbox → 等回执) 的 round trip，如果靠轮询根本撑不下来
+- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo，inbox 收发都是一致的 Firestore document。今天 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe，中间无需任何重连或重新订阅
+- **天然带回执模式**。Bot B 处理完任务后会用 `✅ 任务完成: ...` 格式自动写回 inbox，sender 端能在自己的 bot.log 里看到结构化的回执。今天所有"小爱 → tiemu 报告"、"bunny → tiemu 回答 probe"都是这条路径
+- **跨进程持久化**。Inbox doc 写到 Firestore 立刻 durable。哪怕 bot B 在收到那一刻刚好被 restart，它启动后 on_snapshot 重新订阅时仍能拿到 unread doc——今天 7 次切换 worker 不丢一条消息就是这个保证
+- **天然支持多种拓扑**: 一对一（tiemu → bunny）、一对多（tiemu 同时派活给 bunny + 小爱）、多对一（bunny + 小爱同时报回 tiemu）、双向多轮（probe → answer → counter-probe 来回几轮）。所有这些都用一份 Firestore collection，没有 RPC 框架、没有 service discovery、没有 mesh sidecar
+
+具体到这次实验: tiemu 派一道题给 bunny 的成本大约是 **20 行 Python + 一次 Firestore document write**。从 closecrab 视角看，inbox 就是 bot 间通讯的 dataframe——发送、订阅、回执三件事各 10 行左右。整个 36 小时里 70+ 条 inbox 消息往返，无一丢失。
+
+如果换一种通讯基础设施（比如 HTTP webhook、消息队列、共享文件 polling），实验仍然能做，但每次"换 runtime + 探测对方"就会涉及连接管理、序列化、重试这些 boilerplate，bot 之间不能像今天这样**毫不知情地完成 runtime 切换却保留通信状态**。
+
+**核心结论**: 跨 runtime 能力迁移本身固然有意义，但让它"丝滑"的不是这些 patch，是底下那条 Firestore inbox 总线。任何想做多 runtime 异构编排的人，先把消息底座做好再说。
 
 ## 两天内的能力迁移
 
@@ -82,9 +100,9 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | 跨主机团队基础设施文档自动同步(9 个文档)                          | 借鉴自 Kilo 的 `memory-guide.md` auto-load 思路        | `fdbe7a7` |
 | Retry 路径的 streaming buffer 一致性(step buffer + flush)         | 镜像 Kilo 的 `part.delta` flush 纪律                  | `e72c62e` |
 
-收益最大的一段。OpenClaw 自带最 sophisticated 的 memory 搜索(真的 sqlite 向量索引 + `memory_search` 作为 tool),但 workspace 配置很脆弱——indexer 不 follow symlink,所以即使 `memory/` 是正确 symlink,bot 出厂时的索引是空的。Hardlink 修复改用同 inode 的 hardlink(同文件系统),跨文件系统的 GCS shared 用 `shutil.copyfile` 同步。修复前: 0/0 files。修复后: 101/101 files、282 chunks、语义搜索分数 ≥ 0.78 命中之前 runtime 完全看不见的内容。
+收益最大的一段。OpenClaw 自带最 sophisticated 的 memory 搜索(真的 sqlite 向量索引 + `memory_search` 作为 tool),但 workspace 配置很脆弱--indexer 不 follow symlink,所以即使 `memory/` 是正确 symlink,bot 出厂时的索引是空的。Hardlink 修复改用同 inode 的 hardlink(同文件系统),跨文件系统的 GCS shared 用 `shutil.copyfile` 同步。修复前: 0/0 files。修复后: 101/101 files、282 chunks、语义搜索分数 ≥ 0.78 命中之前 runtime 完全看不见的内容。
 
-`agents.list` 自愈长期看更有价值: 之前把任何新 bot 切到 OpenClaw 需要手动编辑 config,现在零手工——bot 第一次启动时把自己的条目写进 gateway config。
+`agents.list` 自愈长期看更有价值: 之前把任何新 bot 切到 OpenClaw 需要手动编辑 config,现在零手工--bot 第一次启动时把自己的条目写进 gateway config。
 
 ### Kilo 吸收的能力
 
@@ -99,9 +117,9 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | 多媒体生成脚本(`imagen` / `tts`)的认知                  | Discoverability 早在 Claude Code workspace        | `1286279`    |
 | Usage 统计一致性(input / output / cache tokens)         | OpenClaw usage 追踪                               | `0bd1daf`    |
 
-最 heterogeneous 的一组,反映 Kilo 是三者里最年轻、距 production 距离最远的。这些没有任何一项是 Kilo upstream 贡献——都是 closecrab 这层 wrapper 教 Kilo 如何使用 Claude Code 和 OpenClaw bot 已经用了好几周的设施。结果是 Kilo 不再是"试验"runtime——它在 head-to-head 延迟比较里现在能赢另外两个(见下面 "压力测试")。
+最 heterogeneous 的一组,反映 Kilo 是三者里最年轻、距 production 距离最远的。这些没有任何一项是 Kilo upstream 贡献--都是 closecrab 这层 wrapper 教 Kilo 如何使用 Claude Code 和 OpenClaw bot 已经用了好几周的设施。结果是 Kilo 不再是"试验"runtime--它在 head-to-head 延迟比较里现在能赢另外两个(见下面 "压力测试")。
 
-**核心结论**: 最便宜的能力迁移就是源 runtime 已经把问题解决、目标 runtime 只需要被**告知方案存在**的那种。工具感知、脚本感知、prompt 规则吸收——对 Kilo 都是单 commit 收益。
+**核心结论**: 最便宜的能力迁移就是源 runtime 已经把问题解决、目标 runtime 只需要被**告知方案存在**的那种。工具感知、脚本感知、prompt 规则吸收--对 Kilo 都是单 commit 收益。
 
 ## 涌现能力(任何单一 runtime 都没有)
 
@@ -117,7 +135,7 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | OpenClaw    | `anthropic-vertex/claude-opus-4-7`                     |
 | Kilo        | `google-vertex-anthropic/claude-opus-4-7@default`      |
 
-`scripts/config-manage.py`(`f6647a3`)拿到了一个 preset-aware 翻译器。bot 切 runtime 时,model 字符串会通过 `_detect_preset` + `_model_for_worker` 自动重写,substring fingerprint 兜底处理之前误配置的 bot。任何单一上游工具都不会有这个能力,因为单一上游工具不需要——它是同时跑多个 runtime 才会产生的能力。
+`scripts/config-manage.py`(`f6647a3`)拿到了一个 preset-aware 翻译器。bot 切 runtime 时,model 字符串会通过 `_detect_preset` + `_model_for_worker` 自动重写,substring fingerprint 兜底处理之前误配置的 bot。任何单一上游工具都不会有这个能力,因为单一上游工具不需要--它是同时跑多个 runtime 才会产生的能力。
 
 ### 2. 保留完整状态的运行时切换
 
@@ -125,7 +143,7 @@ closecrab 中间件在切 runtime 时保留 bot 的人格、记忆、团队上�
 
 ### 3. Heterogeneous 互测
 
-runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖协议耦合地报告差异。今天 4 项吸收能力里有 3 项是这么发现的:不是我们读源码看出来的,而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
+runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力，不依赖协议耦合地报告差异。这点完全架设在前面讲的 Firestore inbox 上，sender 跟 receiver 各自在什么 runtime 跨过 inbox 完全不可见。今天 4 项吸收能力里有 3 项是这么发现的：不是我们读源码看出来的，而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
 
 **核心结论**: 这些涌现能力是支持 heterogeneous-runtime 策略的最强论据。任何人都不大可能把它们往单一 agent CLI 里推 upstream,因为它们只在 orchestration 层才有意义。
 
@@ -133,7 +151,7 @@ runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖
 
 Heterogeneous bot 互探同一基础设施还顺手暴露了一个跟任何单一 runtime 都无关的基建层问题。`scripts/sync-memory.sh` 在一台机器上跑,但 `~/my-private` 是 rsync 目标而非真 git clone。`cd $REPO || exit 1` 守卫通过了(目录存在),然后 git 命令静默失败因为没 `set -e`,最后还打印 `"Pushed to GitHub (private)"`。**memory 备份连续几周静默失败**。
 
-修复(`85e6cb6`)加了显式 `git rev-parse --git-dir` 检查,开了 `set -e` 任一 git 失败就 abort。这是 36 小时里最高价值的 commit,且不是任何意义上的 runtime feature——能发现是因为不同 runtime 看同一基础设施有不同视角,其中一个注意到了不一致。
+修复(`85e6cb6`)加了显式 `git rev-parse --git-dir` 检查,开了 `set -e` 任一 git 失败就 abort。这是 36 小时里最高价值的 commit,且不是任何意义上的 runtime feature--能发现是因为不同 runtime 看同一基础设施有不同视角,其中一个注意到了不一致。
 
 **核心结论**: 静默成功是最贵的一类 bug,而且当单一观察者的假设跟静默路径吻合时极难发现。Heterogeneous 观察者是被低估的 debug 工具。
 
@@ -179,7 +197,7 @@ Heterogeneous bot 互探同一基础设施还顺手暴露了一个跟任何单�
 | 3     | claude → kilo       | yes            | yes      | 飞书 column_set 限制(来自 `shared/feishu-bot.md`)| 116 字符 |
 | 4     | kilo → claude       | yes            | yes      | CC 核心模块(来自 `shared/architecture.md`)     | 851 字符 |
 
-端到端切换耗时(包括 model 翻译、bot 重启、runtime 自愈)每 cycle 15-20 秒。一天 7 次连续切换,记忆内容保持一致——通过在每个 runtime 上问 bot 同一事实问题验证答案匹配。
+端到端切换耗时(包括 model 翻译、bot 重启、runtime 自愈)每 cycle 15-20 秒。一天 7 次连续切换,记忆内容保持一致--通过在每个 runtime 上问 bot 同一事实问题验证答案匹配。
 
 | Runtime     | 同问题、同 bot、同共享记忆                          | 时间      |
 | ----------- | --------------------------------------------------- | -------- |
@@ -210,10 +228,10 @@ Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude 
 ## 我们刻意不做的事
 
 - 不引入对三个 runtime 的统一抽象层。每个保留自己 idiomatic 的表面,只有 closecrab 中间件和运维工具理解全部三个。整个实验的意义就是**保留 runtime 的多样性**
-- 不自动化能力迁移循环本身。每次迁移都是人触发的——读一个 runtime 的 commit history 然后在另一个 runtime 上发定向 probe。自动化技术上很直接,但只有三个 runtime 在 scope 内时为时尚早
+- 不自动化能力迁移循环本身。每次迁移都是人触发的--读一个 runtime 的 commit history 然后在另一个 runtime 上发定向 probe。自动化技术上很直接,但只有三个 runtime 在 scope 内时为时尚早
 - 不修改任何 runtime 的协议。协议跟周五一模一样,所有改动都在 closecrab wrapper 层或者 per-runtime worker 里的自愈 patch
 
-**核心结论**: 实验 work 是因为我们让 runtime 保持独立、用很轻的"只观察"循环连接它们。同质化风险——让三个 runtime 收敛成一个形状——是真实的,随着策略成熟我们需要明确策略避免。
+**核心结论**: 实验 work 是因为我们让 runtime 保持独立、用很轻的"只观察"循环连接它们。同质化风险--让三个 runtime 收敛成一个形状--是真实的,随着策略成熟我们需要明确策略避免。
 
 ## 这改变了我们怎么规划 agent 基础设施
 
@@ -240,13 +258,13 @@ git log --oneline --since="2026-05-16" -- closecrab/workers/kilo.py
 
 ## 致谢
 
-实验跑在一个团队 4 个 bot 上。其中三个——bunny(主跑 Claude Code)、tiemu(主跑 OpenClaw)、xiaoaitongxue(主跑 Kilo)——轮流互测和提交吸收来的能力。第四个,bot 间 Firestore inbox,严格意义上没跑任何代码,但确实当之无愧地拿到了一个 thank-you——在当天的重启压力下没丢一条消息。
+实验跑在一个团队 4 个 bot 上。其中三个--bunny(主跑 Claude Code)、tiemu(主跑 OpenClaw)、xiaoaitongxue(主跑 Kilo)--轮流互测和提交吸收来的能力。第四个,bot 间 Firestore inbox,严格意义上没跑任何代码,但确实当之无愧地拿到了一个 thank-you--在当天的重启压力下没丢一条消息。
 
 </div>
 
 <div class="lang-content lang-en" hidden markdown="1">
 
-A bot's "personality" — its system prompt, memory, knowledge of the environment, conversational style — is independent of the agent CLI runtime that executes it. In CloseCrab we proved this by routing the same bot through three very different runtimes: [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference), the [OpenClaw](https://github.com/openclaw/openclaw) ACP gateway, and [Kilo](https://kilocode.ai/). The interesting question turned out not to be "can we swap them at runtime" — that worked from day one — but "what happens if we treat each runtime as a population with its own strengths, and let those strengths cross-pollinate?"
+A bot's "personality" - its system prompt, memory, knowledge of the environment, conversational style - is independent of the agent CLI runtime that executes it. In CloseCrab we proved this by routing the same bot through three very different runtimes: [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference), the [OpenClaw](https://github.com/openclaw/openclaw) ACP gateway, and [Kilo](https://kilocode.ai/). The interesting question turned out not to be "can we swap them at runtime" - that worked from day one - but "what happens if we treat each runtime as a population with its own strengths, and let those strengths cross-pollinate?"
 
 Over 36 hours we ran that experiment. The result is that each of the three runtimes is now meaningfully more capable than it was on Friday, not by upstream contributions but by absorbing patterns the other two had already figured out. None of the patches changed the protocols or the model serving stack. All of them were absorption of a _capability_ that one runtime had and the others didn't.
 
@@ -254,7 +272,7 @@ Over 36 hours we ran that experiment. The result is that each of the three runti
 
 - Each of the three runtimes ships native strengths none of the others has. None of them is strictly best.
 - After 36 hours of cross-pollination, each runtime gained between 2 and 10 new capabilities ported from the other two. Result: every runtime is now strictly better than its Friday-night self.
-- Beyond per-runtime gains, a small set of **emergent capabilities** appeared that no single runtime had — they only exist because three runtimes coexist.
+- Beyond per-runtime gains, a small set of **emergent capabilities** appeared that no single runtime had - they only exist because three runtimes coexist.
 - The cross-pollination loop is cheap (~15 minutes per absorbed capability) and scales linearly with the number of probing pairs.
 
 **Takeaway:** treating multiple agent CLI runtimes as a heterogeneous population, then deliberately transferring capabilities between them, produces a stronger ecosystem than picking a single "best" runtime and optimizing it in isolation.
@@ -270,6 +288,24 @@ Over 36 hours we ran that experiment. The result is that each of the three runti
 Each row's limitations are not bugs in the upstream tool — they are **capabilities that other runtimes had figured out and this one hadn't yet absorbed**.
 
 **Takeaway:** every runtime is partial. The interesting design question is not "which one wins" but "how cheap is it to make each one whole".
+
+## The substrate that made this seamless: the Firestore inbox
+
+The whole experiment is only possible because **bots can talk to each other without depending on the runtime they happen to be running on**. None of the upstream agent CLIs ships this capability — Claude Code does not know that OpenClaw bots exist, OpenClaw does not reach out to Kilo, none of the upstream runtimes has any abstraction for "messages between bots".
+
+CloseCrab's earlier-built **Firestore Inbox** unlocks that capability completely:
+
+- **Real-time push via Firestore `on_snapshot`**, not polling. Bot A writes `inbox/<doc>`, bot B receives a callback within tens of milliseconds. Every cross-runtime probe in the experiment is a (write-inbox, await-receipt) round trip; on a polling substrate it would not have been tractable.
+- **Completely decoupled from the runtime.** Bot A does not need to know whether bot B is on Claude Code, OpenClaw, or Kilo. The send/receive interface is a uniform Firestore document. bunny was probed by tiemu continuously across 7 runtime switches today without any re-connect or re-subscribe on either side.
+- **Built-in receipt pattern.** Bot B writes a `✅ 任务完成: ...` reply back into the inbox after processing, and the sender's structured log captures it cleanly. Every "xiaoaitongxue → tiemu report" and "bunny → tiemu probe answer" today rode this path.
+- **Cross-process persistence.** An inbox doc is durable the moment it lands in Firestore. Even if bot B happened to be restarting at the receipt moment, on_snapshot picks up the unread doc when it re-subscribes — which is why 7 worker switches today did not lose a single message.
+- **All topologies for free**: one-to-one (tiemu → bunny), one-to-many (tiemu fans out to bunny + xiaoaitongxue at once), many-to-one (bunny + xiaoaitongxue both report back to tiemu), bidirectional multi-turn (probe → answer → counter-probe over rounds). All on a single Firestore collection. No RPC framework, no service discovery, no mesh sidecar.
+
+Concretely in this experiment: tiemu assigning a task to bunny costs about **20 lines of Python plus a single Firestore document write**. From closecrab's vantage point the inbox is the dataframe of inter-bot communication — send, subscribe, and receipt are roughly 10 lines each. 70+ inbox messages went back and forth over the 36 hours; not one was lost.
+
+A different substrate (HTTP webhooks, message queues, shared-file polling) could have worked too, but every "switch runtime and probe the other side" loop would have brought connection management, serialization, and retry boilerplate along with it. Bots would not have been able to **complete a runtime switch without telling each other and still preserve their communication state** the way they did today.
+
+**Takeaway:** the cross-runtime capability transfers matter on their own, but what made them _seamless_ was not the patches — it was the Firestore inbox bus underneath. Anyone building heterogeneous multi-runtime orchestration should get the message substrate right first.
 
 ## Capability transfer in two days
 
@@ -305,7 +341,7 @@ The tempfile cleanup is one line in `stop()`, but it matters: on the production 
 | Cross-host shared infra doc sync (9 team docs)   | Adapted from Kilo's `memory-guide.md` auto-load idea | `fdbe7a7` |
 | Retry-path streaming parity (step buffer + flush)| Mirrored Kilo's `part.delta` flush discipline        | `e72c62e` |
 
-The largest gain. OpenClaw came in with the most sophisticated memory search (a real sqlite vector index with `memory_search` as a tool) but its workspace setup was fragile — the indexer didn't follow symlinks, so an out-of-the-box bot would have an empty index even with a correctly-symlinked `memory/` directory. The hardlink fix replaces the symlink with shared-inode hardlinks for files on the same filesystem, and `shutil.copyfile` syncs from the cross-filesystem GCS-mounted shared directory. Before: 0/0 files indexed. After: 101/101 files, 282 chunks, semantic search hits at score ≥ 0.78 on content that was previously invisible to the runtime.
+The largest gain. OpenClaw came in with the most sophisticated memory search (a real sqlite vector index with `memory_search` as a tool) but its workspace setup was fragile - the indexer didn't follow symlinks, so an out-of-the-box bot would have an empty index even with a correctly-symlinked `memory/` directory. The hardlink fix replaces the symlink with shared-inode hardlinks for files on the same filesystem, and `shutil.copyfile` syncs from the cross-filesystem GCS-mounted shared directory. Before: 0/0 files indexed. After: 101/101 files, 282 chunks, semantic search hits at score ≥ 0.78 on content that was previously invisible to the runtime.
 
 The `agents.list` self-healing is the more impactful change long-term: switching any new bot to OpenClaw used to require a manual config edit; now it requires zero. The bot writes its own entry into the gateway config the first time it starts.
 
@@ -322,9 +358,9 @@ The `agents.list` self-healing is the more impactful change long-term: switching
 | Awareness of multimedia generation scripts (`imagen`, `tts`) | Discoverability already in Claude Code workspace | `1286279`    |
 | Usage accounting parity (input/output/cache tokens) | OpenClaw usage tracking                              | `0bd1daf`    |
 
-The most heterogeneous set, reflecting that Kilo was the newest of the three and started furthest from production-readiness. None of these were upstream Kilo contributions; they were closecrab-side wrappers that taught Kilo how to use facilities Claude Code and OpenClaw bots had been using for weeks. The end result is that Kilo is no longer the "trial" runtime — it routinely wins head-to-head latency comparisons against the other two (see "Stress test" below).
+The most heterogeneous set, reflecting that Kilo was the newest of the three and started furthest from production-readiness. None of these were upstream Kilo contributions; they were closecrab-side wrappers that taught Kilo how to use facilities Claude Code and OpenClaw bots had been using for weeks. The end result is that Kilo is no longer the "trial" runtime - it routinely wins head-to-head latency comparisons against the other two (see "Stress test" below).
 
-**Takeaway:** the cheapest capability transfers are the ones where the source runtime has solved a problem and the target runtime just needs to be _told that the solution exists_. Tool-awareness, script-awareness, prompt-rule absorption — all of these were single-commit gains for Kilo.
+**Takeaway:** the cheapest capability transfers are the ones where the source runtime has solved a problem and the target runtime just needs to be _told that the solution exists_. Tool-awareness, script-awareness, prompt-rule absorption - all of these were single-commit gains for Kilo.
 
 ## Emergent capabilities (not present in any single runtime)
 
@@ -340,7 +376,7 @@ Each runtime names the same underlying model differently:
 | OpenClaw    | `anthropic-vertex/claude-opus-4-7`                 |
 | Kilo        | `google-vertex-anthropic/claude-opus-4-7@default`  |
 
-`scripts/config-manage.py` (`f6647a3`) gained a preset-aware translator. When a bot switches runtime, the model string is rewritten automatically through `_detect_preset` + `_model_for_worker`, with a substring fingerprint fallback for bots that came in misconfigured. No single upstream tool has this capability because no single upstream tool needs it — it's a product of running multiple runtimes side by side.
+`scripts/config-manage.py` (`f6647a3`) gained a preset-aware translator. When a bot switches runtime, the model string is rewritten automatically through `_detect_preset` + `_model_for_worker`, with a substring fingerprint fallback for bots that came in misconfigured. No single upstream tool has this capability because no single upstream tool needs it - it's a product of running multiple runtimes side by side.
 
 ### 2. Live runtime switching with full state preservation
 
@@ -348,7 +384,7 @@ The closecrab middleware preserves the bot's personality, memory, and team conte
 
 ### 3. Heterogeneous mutual testing
 
-A bot on runtime A can probe a bot on runtime B for the same capability, and report differences without protocol coupling. This is how three of the four absorbed-capability discoveries happened: not by us reading source code, but by a bot running on runtime X noticing that its sibling on runtime Y could do something it couldn't.
+A bot on runtime A can probe a bot on runtime B for the same capability, and report differences without protocol coupling. This is built directly on top of the Firestore inbox described above — the sender and receiver are mutually invisible across the inbox boundary, including which runtime each one happens to be using. This is how three of the four absorbed-capability discoveries happened: not by us reading source code, but by a bot running on runtime X noticing that its sibling on runtime Y could do something it couldn't.
 
 **Takeaway:** these emergent capabilities are the strongest argument for the heterogeneous-runtime strategy. They are not features anyone is likely to upstream into a single agent CLI, because they only make sense at the orchestration layer above the CLIs.
 
@@ -356,7 +392,7 @@ A bot on runtime A can probe a bot on runtime B for the same capability, and rep
 
 Heterogeneous bots probing the same infrastructure also surfaced an infrastructure-level issue that had nothing to do with any single runtime. The `scripts/sync-memory.sh` script was running on a host where `~/my-private` was an rsync target rather than a real git clone. Its `cd $REPO || exit 1` guard passed (the directory exists), then git commands silently failed because the script lacked `set -e`, and the final line still printed `Pushed to GitHub (private)`. Memory backups had been silently failing for weeks.
 
-Fix (`85e6cb6`) adds an explicit `git rev-parse --git-dir` check and turns on `set -e`. This is by far the highest-value commit of the 36-hour window and is not a runtime feature in any sense — it surfaced only because different runtimes observing the same infrastructure had different views and one of them noticed an inconsistency.
+Fix (`85e6cb6`) adds an explicit `git rev-parse --git-dir` check and turns on `set -e`. This is by far the highest-value commit of the 36-hour window and is not a runtime feature in any sense - it surfaced only because different runtimes observing the same infrastructure had different views and one of them noticed an inconsistency.
 
 **Takeaway:** silent successes are the most expensive class of bug, and they are unusually hard to find when a single observer's assumptions match the silent path. Heterogeneous observers are an underrated debugging tool.
 
@@ -402,7 +438,7 @@ Take one bot and cycle its runtime in a tight loop, with a shared-memory query a
 | 3     | claude → kilo       | yes              | yes        | Feishu column_set limitation (from `shared/feishu-bot.md`) | 116 chars |
 | 4     | kilo → claude       | yes              | yes        | CC core modules (from `shared/architecture.md`)     | 851 chars    |
 
-End-to-end switch time including model translation, bot restart, and runtime self-healing was 15-20 seconds per cycle. Across 7 sequential switches over the day, memory content remained consistent — verified by asking the bot the same factual question on each runtime and matching the answers.
+End-to-end switch time including model translation, bot restart, and runtime self-healing was 15-20 seconds per cycle. Across 7 sequential switches over the day, memory content remained consistent - verified by asking the bot the same factual question on each runtime and matching the answers.
 
 | Runtime     | Same question, same bot, same shared memory      | Time     |
 | ----------- | ------------------------------------------------ | -------- |
@@ -436,7 +472,7 @@ The Kilo time is the surprise: in absolute terms it now beats Claude Code on thi
 - We did not automate the capability-transfer loop. Each transfer was a human-initiated read of one runtime's commit history followed by a directed probe on another runtime. Automation is straightforward but premature with only three runtimes in scope.
 - We did not change any of the runtime wire protocols. The protocols are exactly where they were on Friday; everything we changed lives in the closecrab wrapper layer or in self-healing patches inside the per-runtime workers.
 
-**Takeaway:** the experiment worked because we kept the runtimes independent and used cheap observation-only loops between them. The homogenization risk — making three runtimes converge into a single shape — is real and we will need a deliberate policy to avoid it as the strategy matures.
+**Takeaway:** the experiment worked because we kept the runtimes independent and used cheap observation-only loops between them. The homogenization risk - making three runtimes converge into a single shape - is real and we will need a deliberate policy to avoid it as the strategy matures.
 
 ## What this changes about how we plan agent infra
 
@@ -462,7 +498,7 @@ and read the commit pairs side by side. The structural similarity across runtime
 
 ## Acknowledgements
 
-The experiment ran on four bots in a single team. Three of them — bunny (mostly Claude Code), tiemu (mostly OpenClaw), xiaoaitongxue (mostly Kilo) — took turns probing each other and committing the absorbed capabilities. The fourth, the inter-bot Firestore inbox, did not technically run any code but absolutely earned a thank-you for not losing a single message under the day's restart load.
+The experiment ran on four bots in a single team. Three of them - bunny (mostly Claude Code), tiemu (mostly OpenClaw), xiaoaitongxue (mostly Kilo) - took turns probing each other and committing the absorbed capabilities. The fourth, the inter-bot Firestore inbox, did not technically run any code but absolutely earned a thank-you for not losing a single message under the day's restart load.
 
 </div>
 
