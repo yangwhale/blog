@@ -1,0 +1,62 @@
+---
+layout: default
+---
+
+<div class="hero">
+  <div class="hero-inner">
+    <h1 class="hero-title">{{ site.title }}</h1>
+    <p class="hero-subtitle">{{ site.subtitle }}</p>
+    <p class="hero-lede">
+      Notes from Cloud AI Infra work — TPU v7 Ironwood, GPU inference
+      (vLLM / SGLang), large-scale training pipelines, and the cloud
+      infrastructure underneath. Written for engineers who want concrete
+      details over abstract overviews.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://github.com/yangwhale">GitHub</a>
+      <a class="btn btn-secondary" href="mailto:{{ site.email }}">Email</a>
+      <a class="btn btn-secondary" href="/feed.xml">RSS</a>
+      <a class="btn btn-secondary" href="/about/">About</a>
+    </div>
+  </div>
+</div>
+
+<section class="post-section">
+  <div class="post-section-inner">
+    <h2 class="section-heading">Latest posts</h2>
+
+    {% if site.posts.size == 0 %}
+      <p class="empty-state">No posts yet — first article coming soon.</p>
+    {% else %}
+      <ul class="post-cards">
+        {% for post in site.posts %}
+          <li class="post-card">
+            <a class="post-card-link" href="{{ post.url | relative_url }}">
+              <div class="post-card-meta">
+                <time datetime="{{ post.date | date_to_xmlschema }}">
+                  {{ post.date | date: "%Y-%m-%d" }}
+                </time>
+                {% if post.categories.size > 0 %}
+                  <span class="post-card-cats">
+                    {% for cat in post.categories %}
+                      <span class="cat-chip">{{ cat }}</span>
+                    {% endfor %}
+                  </span>
+                {% endif %}
+              </div>
+              <h3 class="post-card-title">{{ post.title }}</h3>
+              {% if post.excerpt %}
+                <p class="post-card-excerpt">
+                  {{ post.excerpt | strip_html | strip_newlines | truncate: 180 }}
+                </p>
+              {% endif %}
+              <span class="post-card-readmore">Read post →</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</section>
+
+{{ content }}

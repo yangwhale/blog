@@ -236,9 +236,234 @@ table {
   a:hover { color: $gcp-blue; }
 }
 
+// ── Home: hero section ───────────────────────────────────────────────
+//
+// cloud.google.com/blog-style hero: light gray slab full-width across the
+// viewport with the content constrained to $content-width inside. No
+// gradients, no decorative graphics — just typography on a flat panel.
+.hero {
+  background: $gcp-bg-alt;
+  border-bottom: 1px solid $gcp-border;
+  padding: 56px 0 48px;
+  // Pull the gray slab to the viewport edge regardless of .wrapper padding.
+  margin: -48px calc(-50vw + 50%) 0;
+}
+
+.hero-inner {
+  max-width: $content-width;
+  margin: 0 auto;
+  padding: 0 $spacing-unit / 2;
+  text-align: left;
+}
+
+.hero-title {
+  font-family: $font-sans;
+  font-size: 40px;
+  font-weight: 400;
+  letter-spacing: -0.8px;
+  color: $gcp-text;
+  margin: 0 0 8px;
+  line-height: 1.15;
+}
+
+.hero-subtitle {
+  font-size: 18px;
+  font-weight: 400;
+  color: $gcp-text-soft;
+  margin: 0 0 20px;
+  letter-spacing: -0.1px;
+}
+
+.hero-lede {
+  font-size: 15px;
+  line-height: 1.65;
+  color: $gcp-text-soft;
+  max-width: 640px;
+  margin: 0 0 28px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+// Material-style buttons. .btn-primary is solid Google Blue,
+// .btn-secondary is a quiet outlined chip.
+.btn {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 4px;
+  font-family: $font-sans;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  text-decoration: none;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease,
+              border-color 0.15s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: $gcp-blue;
+  color: $gcp-bg;
+  &:hover, &:focus {
+    background: $gcp-blue-hover;
+    color: $gcp-bg;
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
+  }
+  &:visited { color: $gcp-bg; }
+}
+
+.btn-secondary {
+  background: $gcp-bg;
+  color: $gcp-blue;
+  border-color: $gcp-border;
+  &:hover, &:focus {
+    background: $gcp-bg-alt;
+    border-color: $gcp-blue;
+    color: $gcp-blue-hover;
+    text-decoration: none;
+  }
+  &:visited { color: $gcp-blue; }
+}
+
+// ── Home: latest-posts section ──────────────────────────────────────
+.post-section {
+  padding: 48px 0 16px;
+}
+
+.post-section-inner {
+  max-width: $content-width;
+  margin: 0 auto;
+}
+
+.section-heading {
+  font-size: 14px;
+  font-weight: 500;
+  color: $gcp-text-muted;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin: 0 0 20px;
+  padding: 0;
+  border: none;
+}
+
+.empty-state {
+  color: $gcp-text-muted;
+  font-size: 14px;
+  padding: 24px 0;
+}
+
+.post-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+// Each card is a flat panel with hover lift (subtle Material elevation 1→2).
+.post-card {
+  background: $gcp-bg;
+  border: 1px solid $gcp-border;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+              transform 0.15s ease;
+  margin: 0;
+
+  &:hover {
+    border-color: rgba($gcp-blue, 0.4);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+  }
+}
+
+.post-card-link {
+  display: block;
+  padding: 18px 22px;
+  color: inherit;
+
+  &:hover { text-decoration: none; color: inherit; }
+}
+
+.post-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: $gcp-text-muted;
+
+  time {
+    font-family: $font-mono;
+    font-size: 12px;
+    color: $gcp-text-muted;
+  }
+}
+
+.cat-chip {
+  display: inline-block;
+  background: rgba($gcp-blue, 0.08);
+  color: $gcp-blue;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-right: 4px;
+  text-transform: lowercase;
+}
+
+.post-card-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: $gcp-text;
+  margin: 8px 0 6px;
+  letter-spacing: -0.2px;
+  line-height: 1.35;
+  border: none;
+  padding: 0;
+}
+
+.post-card:hover .post-card-title { color: $gcp-blue; }
+
+.post-card-excerpt {
+  font-size: 14px;
+  line-height: 1.55;
+  color: $gcp-text-soft;
+  margin: 0 0 10px;
+}
+
+.post-card-readmore {
+  font-size: 13px;
+  font-weight: 500;
+  color: $gcp-blue;
+}
+
+// Hide the bullet list that minima's `home` content body adds — our
+// custom layout already rendered the posts as cards.
+.post-list-heading,
+.post-list { display: none; }
+
 // ── Mobile tweaks ────────────────────────────────────────────────────
 @media (max-width: 600px) {
   h1, .post-title { font-size: 24px; }
   .page-content { padding: 24px 0; }
   pre { font-size: 12px; padding: 12px; }
+
+  .hero {
+    padding: 36px 0 32px;
+    margin-top: -24px;
+  }
+  .hero-title { font-size: 30px; }
+  .hero-subtitle { font-size: 16px; }
+  .hero-lede { font-size: 14px; }
+
+  .post-card-link { padding: 14px 16px; }
+  .post-card-title { font-size: 16px; }
 }
