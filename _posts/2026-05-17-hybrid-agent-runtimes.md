@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Hybrid agent runtimes: how Claude Code, OpenClaw, and Kilo grew into each other's strengths"
+title: "Hybrid agent runtimes: how Claude Code, OpenClaw, and Kilo Code grew into each other's strengths"
 date: 2026-05-17 10:50:00 +0000
 categories: [agents, infra]
 lang: bilingual
@@ -23,9 +23,9 @@ lang: bilingual
 
 <div class="lang-content lang-zh" markdown="1">
 
-![一只赛博朋克机械蟹子，胸腔内部嵌着三个发光的 agent runtime 模块：Claude Code / OpenClaw / Kilo](/assets/img/hybrid-agent-crab-hero.jpg)
+![一只赛博朋克机械蟹子，胸腔内部嵌着三个发光的 agent runtime 模块：Claude Code / OpenClaw / Kilo Code](/assets/img/hybrid-agent-crab-hero.jpg)
 
-一个 bot 的"人格"——它的 system prompt、记忆、对环境的认知、对话风格——跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑--[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"--这从第一天就 work--而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
+一个 bot 的"人格"——它的 system prompt、记忆、对环境的认知、对话风格——跟执行它的 agent CLI runtime 是相互独立的。在 CloseCrab 里我们证明了这一点:同一个 bot 可以经由三个差别很大的 runtime 来跑--[Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference)、[OpenClaw](https://github.com/openclaw/openclaw) ACP gateway、以及 [Kilo Code](https://kilocode.ai/)。但真正有意思的问题不是"能不能运行时切换"--这从第一天就 work--而是"如果把每个 runtime 当作一个有自己看家本事的物种,让它们的优势在彼此之间杂交,会怎样?"
 
 36 小时内,我们跑完了这个实验。结果是三个 runtime 现在每一个都比实验开始时更强,不是靠 upstream 贡献,而是靠**吸收了另外两个 runtime 早已搞定的能力**。所有 patch 没改任何协议,没动模型 serving 栈,全部都是把一个 runtime 拥有、另外两个还缺的**能力**整个吸收过来。
 
@@ -33,7 +33,6 @@ lang: bilingual
 
 - 三个 runtime 各有看家本事,谁都不是严格最强
 - 36 小时跨 runtime 互相吸收能力之后,每个 runtime 都吸收了 2-10 项原本没有的能力,**每一个都比起始版本严格更强**
-- 除了单一 runtime 的能力增益之外,还出现了一组**涌现能力**--它们只在三个 runtime 共存时才存在,任何单一 runtime 都没有
 - 杂交循环成本很低(每项能力 ~15 分钟),随 probing 对数量线性增长
 
 **核心结论**: 把多个 agent CLI runtime 当作一个有差异的种群,在它们之间定向迁移能力,比选一个"最优 runtime"独立优化产生更强的生态。
@@ -44,7 +43,7 @@ lang: bilingual
 | ------------- | --------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
 | Claude Code   | Unix socketpair + stream-JSON | 工具集最丰富、原生并发 `tool_use`、stream-JSON 事件模型成熟 | 空回复无重试、subprocess 侧 tempfile 泄漏、无语义记忆索引 |
 | OpenClaw      | ACP (JSON-RPC over stdio)   | 模型选择最广、1M token 上下文、sqlite 后端 `memory_search` | 启动时不自配置、indexer 不 follow symlink、不知道团队共享文档 |
-| Kilo          | HTTP SSE                    | 启动最快(~3s)、`part.delta` 流式、模型无关抽象      | 无 streaming buffer 恢复、不知道多媒体生成脚本、usage 字段统计脆弱 |
+| Kilo Code          | HTTP SSE                    | 启动最快(~3s)、`part.delta` 流式、模型无关抽象      | 无 streaming buffer 恢复、不知道多媒体生成脚本、usage 字段统计脆弱 |
 
 每一行右边的"缺失"不是上游工具的 bug--而是**别的 runtime 已经搞定、它还没吸收的能力**。
 
@@ -52,12 +51,12 @@ lang: bilingual
 
 ## 让这一切丝滑运转的基础设施: Firestore Inbox
 
-整个实验能跑起来的前提是**bot 之间能在不依赖 runtime 本身能力的前提下互相对话**。这件事不是 agent CLI 自带的--Claude Code 不知道 OpenClaw 上有兄弟、OpenClaw 不会主动联络 Kilo,任一上游 runtime 都没有"bot 间消息"这层抽象。
+整个实验能跑起来的前提是**bot 之间能在不依赖 runtime 本身能力的前提下互相对话**。这件事不是 agent CLI 自带的--Claude Code 不知道 OpenClaw 上有兄弟、OpenClaw 不会主动联络 Kilo Code,任一上游 runtime 都没有"bot 间消息"这层抽象。
 
 CloseCrab 早些时候搭起来的 **Firestore Inbox** 解锁了这层能力,而且解锁得很彻底:
 
 - **基于 Firestore `on_snapshot` 的实时推送**--不是轮询。Bot A 写 `inbox/<doc>`,bot B 几十毫秒内就收到 callback。整个实验的每一次跨 runtime probe 都是一个 (写 inbox → 等回执) 的 round trip,如果靠轮询根本撑不下来
-- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo,inbox 收发都是一致的 Firestore document。实验期间 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe,中间无需任何重连或重新订阅
+- **跟 runtime 完全解耦**。Bot A 不需要知道 bot B 跑的是 Claude Code、OpenClaw 还是 Kilo Code,inbox 收发都是一致的 Firestore document。实验期间 bunny 在 7 次 runtime 切换里持续接收 tiemu 派的 probe,中间无需任何重连或重新订阅
 - **天然带回执模式**。Bot B 处理完任务后会用 `✅ 任务完成: ...` 格式自动写回 inbox,sender 端能在自己的 bot.log 里看到结构化的回执。实验期间所有"小爱 → tiemu 报告"、"bunny → tiemu 回答 probe"都是这条路径
 - **跨进程持久化**。Inbox doc 写到 Firestore 立刻 durable。哪怕 bot B 在收到那一刻刚好被 restart,它启动后 on_snapshot 重新订阅时仍能拿到 unread doc--实验中 7 次切换 worker 不丢一条消息就是这个保证
 - **天然支持多种拓扑**: 一对一(tiemu → bunny)、一对多(tiemu 同时派活给 bunny + 小爱)、多对一(bunny + 小爱同时报回 tiemu)、双向多轮(probe → answer → counter-probe 来回几轮)。所有这些都用一份 Firestore collection,没有 RPC 框架、没有 service discovery、没有 mesh sidecar
@@ -75,7 +74,7 @@ CloseCrab 早些时候搭起来的 **Firestore Inbox** 解锁了这层能力,而
 | 吸收的能力                                  | 来源模式                                    | Commit     |
 | ------------------------------------------- | ------------------------------------------- | ---------- |
 | 空回复重试韧性                              | OpenClaw 的 `_retry_on_empty_response`      | `613b2a5`  |
-| Subprocess 端 tempfile 生命周期卫生         | OpenClaw 和 Kilo 早就遵循的纪律             | `613b2a5`  |
+| Subprocess 端 tempfile 生命周期卫生         | OpenClaw 和 Kilo Code 早就遵循的纪律             | `613b2a5`  |
 
 重试模式是逐行移植。当 LLM 返回空 completion,runtime 现在会在同一 session 里把同一 prompt 重发一次,再决定要不要给用户兜底文案。具体实现不同(Claude Code 通过 Unix socket 写一行 stream-JSON,OpenClaw 通过 stdin 发 JSON-RPC),但状态机一样:置一个一次性 retry 标记 → 清累加器 → 重发 → 继续读循环。
 
@@ -99,14 +98,14 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | 启动时 `agents.list` 自配置                                       | Claude Code "按约定自动加载" 模型                     | `8a64cd2` |
 | 基于 hardlink 的 memory wiring                                    | Claude Code 直接读文件的记忆模型                      | `9897054` |
 | Bot 启动自动 reindex                                              | "启动时自愈" 模式                                     | `9897054` |
-| 跨主机团队基础设施文档自动同步(9 个文档)                          | 借鉴自 Kilo 的 `memory-guide.md` auto-load 思路        | `fdbe7a7` |
-| Retry 路径的 streaming buffer 一致性(step buffer + flush)         | 镜像 Kilo 的 `part.delta` flush 纪律                  | `e72c62e` |
+| 跨主机团队基础设施文档自动同步(9 个文档)                          | 借鉴自 Kilo Code 的 `memory-guide.md` auto-load 思路        | `fdbe7a7` |
+| Retry 路径的 streaming buffer 一致性(step buffer + flush)         | 镜像 Kilo Code 的 `part.delta` flush 纪律                  | `e72c62e` |
 
 收益最大的一段。OpenClaw 自带最成熟的语义记忆索引(真的 sqlite 向量索引 + `memory_search` 作为 tool),但 workspace 配置很脆弱--indexer 不 follow symlink,所以即使 `memory/` 是正确 symlink,bot 出厂时的索引是空的。Hardlink 修复改用同 inode 的 hardlink(同文件系统),跨文件系统的 GCS shared 用 `shutil.copyfile` 同步。修复前: 0/0 files。修复后: 101/101 files、282 chunks、语义搜索分数 ≥ 0.78 命中之前 runtime 完全看不见的内容。
 
 `agents.list` 自愈长期看更有价值: 之前把任何新 bot 切到 OpenClaw 需要手动编辑 config,现在零手工--bot 第一次启动时把自己的条目写进 gateway config。
 
-### Kilo 吸收的能力
+### Kilo Code 吸收的能力
 
 | 吸收的能力                                              | 来源模式                                          | Commit       |
 | ------------------------------------------------------- | ------------------------------------------------- | ------------ |
@@ -119,35 +118,10 @@ Tempfile 清理只一行代码,但影响真实:生产机上 Claude Code 在过�
 | 多媒体生成脚本(`imagen` / `tts`)的认知                  | Discoverability 早在 Claude Code workspace        | `1286279`    |
 | Usage 统计一致性(input / output / cache tokens)         | OpenClaw usage 追踪                               | `0bd1daf`    |
 
-最杂的一组,反映 Kilo 是三者里最年轻、距 production 距离最远的。这些没有任何一项是 Kilo upstream 贡献--都是 closecrab 这层 wrapper 教 Kilo 如何使用 Claude Code 和 OpenClaw bot 已经用了好几周的设施。结果是 Kilo 不再是"试验"runtime--它在 head-to-head 延迟比较里现在能赢另外两个(见下面 "压力测试")。
+最杂的一组,反映 Kilo Code 是三者里最年轻、距 production 距离最远的。这些没有任何一项是 Kilo Code upstream 贡献--都是 closecrab 这层 wrapper 教 Kilo Code 如何使用 Claude Code 和 OpenClaw bot 已经用了好几周的设施。结果是 Kilo Code 不再是"试验"runtime--它在 head-to-head 延迟比较里现在能赢另外两个(见下面 "压力测试")。
 
-**核心结论**: 最便宜的能力迁移就是源 runtime 已经把问题解决、目标 runtime 只需要被**告知方案存在**的那种。工具感知、脚本感知、prompt 规则吸收--对 Kilo 都是单 commit 收益。
+**核心结论**: 最便宜的能力迁移就是源 runtime 已经把问题解决、目标 runtime 只需要被**告知方案存在**的那种。工具感知、脚本感知、prompt 规则吸收--对 Kilo Code 都是单 commit 收益。
 
-## 涌现能力(任何单一 runtime 都没有)
-
-有三项能力只因为三个 runtime 共存才存在:
-
-### 1. 跨 runtime model 名翻译
-
-每个 runtime 给同一底层模型用不同名字:
-
-| Runtime     | Claude Opus 4.7 model 字符串                            |
-| ----------- | ------------------------------------------------------ |
-| Claude Code | `claude-opus-4-7@default`                              |
-| OpenClaw    | `anthropic-vertex/claude-opus-4-7`                     |
-| Kilo        | `google-vertex-anthropic/claude-opus-4-7@default`      |
-
-`scripts/config-manage.py`(`f6647a3`)拿到了一个 preset-aware 翻译器。bot 切 runtime 时,model 字符串会通过 `_detect_preset` + `_model_for_worker` 自动重写,substring fingerprint 兜底处理之前误配置的 bot。任何单一上游工具都不会有这个能力,因为单一上游工具不需要--它是同时跑多个 runtime 才会产生的能力。
-
-### 2. 保留完整状态的运行时切换
-
-closecrab 中间件在切 runtime 时保留 bot 的人格、记忆、团队上下文。一个 bot 在 20 秒内能在 Claude Code、OpenClaw、Kilo 之间移动,不丢失任何长期记忆、不需要手工重配。Runtime 特定的自愈(OpenClaw 的 hardlink + reindex、Kilo 的 HTTP server spawn、Claude Code 的 session resume)自动跑。
-
-### 3. 异构互测
-
-runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖协议耦合地报告差异。这点完全架设在前面讲的 Firestore inbox 上,sender 跟 receiver 各自在什么 runtime 跨过 inbox 完全不可见。本次实验 4 项吸收能力里有 3 项是这么发现的:不是我们读源码看出来的,而是 runtime X 上的 bot 注意到 runtime Y 上的兄弟能做它做不了的事。
-
-**核心结论**: 这些涌现能力是支持 异构 runtime 策略的最强论据。任何人都不大可能把它们往单一 agent CLI 里推 upstream,因为它们只在 orchestration 层才有意义。
 
 ## 一个副产品发现: 静默的备份回退
 
@@ -171,7 +145,7 @@ runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖
   <text x="600" y="106" text-anchor="middle" fill="#fff" font-size="14" font-weight="500" font-family="Google Sans, sans-serif">OpenClaw</text>
   <text x="600" y="124" text-anchor="middle" fill="#fff" font-size="11" font-family="Roboto, sans-serif">ACP</text>
   <circle cx="360" cy="260" r="44" fill="#1A73E8"/>
-  <text x="360" y="256" text-anchor="middle" fill="#fff" font-size="14" font-weight="500" font-family="Google Sans, sans-serif">Kilo</text>
+  <text x="360" y="256" text-anchor="middle" fill="#fff" font-size="14" font-weight="500" font-family="Google Sans, sans-serif">Kilo Code</text>
   <text x="360" y="274" text-anchor="middle" fill="#fff" font-size="11" font-family="Roboto, sans-serif">HTTP SSE</text>
   <path d="M 164 110 L 556 110" stroke="#5F6368" stroke-width="1.5" fill="none" marker-end="url(#arr-zh)"/>
   <text x="360" y="100" text-anchor="middle" font-size="12" fill="#5F6368" font-family="Roboto, sans-serif">空回复重试 + tempfile 卫生</text>
@@ -207,9 +181,9 @@ runtime A 上的 bot 可以向 runtime B 上的 bot 探测同一能力,不依赖
 | ----------- | --------------------------------------------------- | -------- |
 | OpenClaw    | `memory_search` + `read` + `exec`,9 步              | ~120s   |
 | Claude Code | 单个 parallel tool_use block 里 3 个 `Grep`         | 42.66s  |
-| Kilo        | `bash` × 3,串行                                    | ~37s    |
+| Kilo Code        | `bash` × 3,串行                                    | ~37s    |
 
-Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude Code,尽管实验开始时它是三个 runtime 里最不成熟的。这个提升几乎完全来自吸收的能力(streaming flush、tool 批处理规则、原生 cold start 速度保留)。
+Kilo Code 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude Code,尽管实验开始时它是三个 runtime 里最不成熟的。这个提升几乎完全来自吸收的能力(streaming flush、tool 批处理规则、原生 cold start 速度保留)。
 
 ## 数据
 
@@ -221,8 +195,7 @@ Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude 
 | 增删行数                            | +5,070 / -568        |
 | Claude Code 吸收的能力              | 36 小时                    |
 | OpenClaw 吸收的能力                 | 5                    |
-| Kilo 吸收的能力                     | 10                   |
-| 涌现能力                            | 3                    |
+| Kilo Code 吸收的能力                     | 10                   |
 | 基础设施侧顺手发现                  | 1(静默 backup)      |
 | `/tmp` 泄漏清理                     | 85 → 0               |
 | 每 bot memory 文件 / chunks 索引    | 101 / 282            |
@@ -243,7 +216,6 @@ Kilo 的时间是惊喜:绝对值上现在它在这个负载里超过了 Claude 
 
 - **多样性是 feature 不是过渡债**。三个 runtime 同时观察同一基础设施发现了任一单一 runtime 都不会发现的 bug
 - **能力迁移很便宜**。大多数收益是单 commit 移植结构类似的逻辑
-- **涌现能力本身就值回成本**。跨 runtime model 翻译、运行时切换、异构互测 全都是只因为 异构性才存在的 feature
 
 我们会保留全部三个 runtime 在生产、继续在三个 runtime 上跑同一 bot 人格、把新 runtime 当作吸收新能力的机会而不是取代既有的候选。
 
@@ -262,15 +234,15 @@ git log --oneline --since="2026-05-16" -- closecrab/workers/kilo.py
 
 ## 致谢
 
-实验跑在一个团队 4 个 bot 上。其中三个--bunny(主跑 Claude Code)、tiemu(主跑 OpenClaw)、xiaoaitongxue(主跑 Kilo)--轮流互测和提交吸收来的能力。第四个,bot 间 Firestore inbox,严格意义上没跑任何代码,但确实当之无愧地值得一句感谢--在 36 小时实验期间的重启压力下没丢一条消息。
+实验跑在一个团队 4 个 bot 上。其中三个--bunny(主跑 Claude Code)、tiemu(主跑 OpenClaw)、xiaoaitongxue(主跑 Kilo Code)--轮流互测和提交吸收来的能力。第四个,bot 间 Firestore inbox,严格意义上没跑任何代码,但确实当之无愧地值得一句感谢--在 36 小时实验期间的重启压力下没丢一条消息。
 
 </div>
 
 <div class="lang-content lang-en" hidden markdown="1">
 
-![A cyberpunk mechanical crab with three glowing agent runtime modules inside its chest cavity: Claude Code, OpenClaw, and Kilo](/assets/img/hybrid-agent-crab-hero.jpg)
+![A cyberpunk mechanical crab with three glowing agent runtime modules inside its chest cavity: Claude Code, OpenClaw, and Kilo Code](/assets/img/hybrid-agent-crab-hero.jpg)
 
-A bot's "personality" - its system prompt, memory, knowledge of the environment, conversational style - is independent of the agent CLI runtime that executes it. In CloseCrab we proved this by routing the same bot through three very different runtimes: [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference), the [OpenClaw](https://github.com/openclaw/openclaw) ACP gateway, and [Kilo](https://kilocode.ai/). The interesting question turned out not to be "can we swap them at runtime" - that worked from day one - but "what happens if we treat each runtime as a population with its own strengths, and let those strengths cross-pollinate?"
+A bot's "personality" - its system prompt, memory, knowledge of the environment, conversational style - is independent of the agent CLI runtime that executes it. In CloseCrab we proved this by routing the same bot through three very different runtimes: [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/cli-reference), the [OpenClaw](https://github.com/openclaw/openclaw) ACP gateway, and [Kilo Code](https://kilocode.ai/). The interesting question turned out not to be "can we swap them at runtime" - that worked from day one - but "what happens if we treat each runtime as a population with its own strengths, and let those strengths cross-pollinate?"
 
 Over 36 hours we ran that experiment. The result is that each of the three runtimes is now meaningfully more capable than at the start of the experiment, not by upstream contributions but by absorbing patterns the other two had already figured out. None of the patches changed the protocols or the model serving stack. All of them were absorption of a _capability_ that one runtime had and the others didn't.
 
@@ -278,7 +250,6 @@ Over 36 hours we ran that experiment. The result is that each of the three runti
 
 - Each of the three runtimes ships native strengths none of the others has. None of them is strictly best.
 - After 36 hours of cross-pollination, each runtime gained between 2 and 10 new capabilities ported from the other two. Result: every runtime is now strictly better than its starting-point self.
-- Beyond per-runtime gains, a small set of **emergent capabilities** appeared that no single runtime had - they only exist because three runtimes coexist.
 - The cross-pollination loop is cheap (~15 minutes per absorbed capability) and scales linearly with the number of probing pairs.
 
 **Takeaway:** treating multiple agent CLI runtimes as a heterogeneous population, then deliberately transferring capabilities between them, produces a stronger ecosystem than picking a single "best" runtime and optimizing it in isolation.
@@ -289,7 +260,7 @@ Over 36 hours we ran that experiment. The result is that each of the three runti
 | ------------- | ---------------------------- | ----------------------------------------------- | --------------------------------------------------- |
 | Claude Code   | Unix socketpair + stream-JSON | Richest tool surface, native parallel `tool_use`, mature stream-JSON event model | No retry on empty response, leaked process-side tempfiles, no semantic memory index |
 | OpenClaw      | ACP (JSON-RPC over stdio)    | Widest model selection, 1M-token context, sqlite-backed `memory_search` | No boot-time self-configuration, indexer didn't follow symlinks, no awareness of team-shared infra docs |
-| Kilo          | HTTP SSE                     | Fastest cold start (~3s), `part.delta` streaming, model-agnostic abstraction | No streaming buffer recovery, no awareness of multimedia generation scripts, fragile usage accounting |
+| Kilo Code          | HTTP SSE                     | Fastest cold start (~3s), `part.delta` streaming, model-agnostic abstraction | No streaming buffer recovery, no awareness of multimedia generation scripts, fragile usage accounting |
 
 Each row's limitations are not bugs in the upstream tool - they are **capabilities that other runtimes had figured out and this one hadn't yet absorbed**.
 
@@ -297,12 +268,12 @@ Each row's limitations are not bugs in the upstream tool - they are **capabiliti
 
 ## The substrate that made this seamless: the Firestore inbox
 
-The whole experiment is only possible because **bots can talk to each other without depending on the runtime they happen to be running on**. None of the upstream agent CLIs ships this capability - Claude Code does not know that OpenClaw bots exist, OpenClaw does not reach out to Kilo, none of the upstream runtimes has any abstraction for "messages between bots".
+The whole experiment is only possible because **bots can talk to each other without depending on the runtime they happen to be running on**. None of the upstream agent CLIs ships this capability - Claude Code does not know that OpenClaw bots exist, OpenClaw does not reach out to Kilo Code, none of the upstream runtimes has any abstraction for "messages between bots".
 
 CloseCrab's earlier-built **Firestore Inbox** unlocks that capability completely:
 
 - **Real-time push via Firestore `on_snapshot`**, not polling. Bot A writes `inbox/<doc>`, bot B receives a callback within tens of milliseconds. Every cross-runtime probe in the experiment is a (write-inbox, await-receipt) round trip; on a polling substrate it would not have been tractable.
-- **Completely decoupled from the runtime.** Bot A does not need to know whether bot B is on Claude Code, OpenClaw, or Kilo. The send/receive interface is a uniform Firestore document. bunny was probed by tiemu continuously across 7 runtime switches during the experiment without any re-connect or re-subscribe on either side.
+- **Completely decoupled from the runtime.** Bot A does not need to know whether bot B is on Claude Code, OpenClaw, or Kilo Code. The send/receive interface is a uniform Firestore document. bunny was probed by tiemu continuously across 7 runtime switches during the experiment without any re-connect or re-subscribe on either side.
 - **Built-in receipt pattern.** Bot B writes a `✅ 任务完成: ...` reply back into the inbox after processing, and the sender's structured log captures it cleanly. Every "xiaoaitongxue → tiemu report" and "bunny → tiemu probe answer" during the experiment rode this path.
 - **Cross-process persistence.** An inbox doc is durable the moment it lands in Firestore. Even if bot B happened to be restarting at the receipt moment, on_snapshot picks up the unread doc when it re-subscribes - which is why 7 worker switches during the experiment did not lose a single message.
 - **All topologies for free**: one-to-one (tiemu → bunny), one-to-many (tiemu fans out to bunny + xiaoaitongxue at once), many-to-one (bunny + xiaoaitongxue both report back to tiemu), bidirectional multi-turn (probe → answer → counter-probe over rounds). All on a single Firestore collection. No RPC framework, no service discovery, no mesh sidecar.
@@ -325,7 +296,7 @@ All bots share the `~/CloseCrab/` repository. tiemu can `edit closecrab/workers/
 
 ### 2. Read the other bot's runtime logs in real time
 
-`tail -f ~/.claude/closecrab/bunny/bot.log` shows exactly what bunny is doing: which tools are being called, what the model returned, whether errors occurred. During this experiment, tiemu diagnosed bunny's empty-response issue, confirmed Kilo's `Model not found` error, and verified startup self-heal log output — all by `grep bot.log` before touching any code. This is 10x faster than asking through the inbox "what just happened to you?".
+`tail -f ~/.claude/closecrab/bunny/bot.log` shows exactly what bunny is doing: which tools are being called, what the model returned, whether errors occurred. During this experiment, tiemu diagnosed bunny's empty-response issue, confirmed Kilo Code's `Model not found` error, and verified startup self-heal log output — all by `grep bot.log` before touching any code. This is 10x faster than asking through the inbox "what just happened to you?".
 
 ### 3. Restart the other bot's process at will
 
@@ -349,7 +320,7 @@ These three capabilities combined with the Firestore inbox's message bus form th
 | Capability                                | Source pattern                       | Commit     |
 | ----------------------------------------- | ------------------------------------ | ---------- |
 | Empty-response retry resilience           | OpenClaw `_retry_on_empty_response`  | `613b2a5`  |
-| Subprocess-side tempfile lifecycle hygiene| Discipline already followed by OpenClaw and Kilo  | `613b2a5`  |
+| Subprocess-side tempfile lifecycle hygiene| Discipline already followed by OpenClaw and Kilo Code  | `613b2a5`  |
 
 The retry pattern was a verbatim port. When the LLM returns an empty completion, the runtime now resends the same prompt once on the same session before surfacing a placeholder to the user. Implementation specifics differ (Claude Code writes a stream-JSON line over a Unix socket; OpenClaw sends a JSON-RPC request over stdin) but the state machine is identical: set a one-shot retry flag, reset accumulators, resend, continue reading.
 
@@ -373,14 +344,14 @@ The tempfile cleanup is one line in `stop()`, but it matters: on the production 
 | Boot-time `agents.list` self-configuration       | Claude Code's "auto-load from convention" model      | `8a64cd2` |
 | Hardlink-backed memory wiring                    | Claude Code's direct-file memory access              | `9897054` |
 | Auto-reindex on bot start                        | "Self-heal on startup" pattern                       | `9897054` |
-| Cross-host shared infra doc sync (9 team docs)   | Adapted from Kilo's `memory-guide.md` auto-load idea | `fdbe7a7` |
-| Retry-path streaming parity (step buffer + flush)| Mirrored Kilo's `part.delta` flush discipline        | `e72c62e` |
+| Cross-host shared infra doc sync (9 team docs)   | Adapted from Kilo Code's `memory-guide.md` auto-load idea | `fdbe7a7` |
+| Retry-path streaming parity (step buffer + flush)| Mirrored Kilo Code's `part.delta` flush discipline        | `e72c62e` |
 
 The largest gain. OpenClaw came in with the most sophisticated memory search (a real sqlite vector index with `memory_search` as a tool) but its workspace setup was fragile - the indexer didn't follow symlinks, so an out-of-the-box bot would have an empty index even with a correctly-symlinked `memory/` directory. The hardlink fix replaces the symlink with shared-inode hardlinks for files on the same filesystem, and `shutil.copyfile` syncs from the cross-filesystem GCS-mounted shared directory. Before: 0/0 files indexed. After: 101/101 files, 282 chunks, semantic search hits at score ≥ 0.78 on content that was previously invisible to the runtime.
 
 The `agents.list` self-healing is the more impactful change long-term: switching any new bot to OpenClaw used to require a manual config edit; now it requires zero. The bot writes its own entry into the gateway config the first time it starts.
 
-### Capabilities Kilo absorbed
+### Capabilities Kilo Code absorbed
 
 | Capability                                          | Source pattern                                       | Commit       |
 | --------------------------------------------------- | ---------------------------------------------------- | ------------ |
@@ -393,35 +364,10 @@ The `agents.list` self-healing is the more impactful change long-term: switching
 | Awareness of multimedia generation scripts (`imagen`, `tts`) | Discoverability already in Claude Code workspace | `1286279`    |
 | Usage accounting parity (input/output/cache tokens) | OpenClaw usage tracking                              | `0bd1daf`    |
 
-The most heterogeneous set, reflecting that Kilo was the newest of the three and started furthest from production-readiness. None of these were upstream Kilo contributions; they were closecrab-side wrappers that taught Kilo how to use facilities Claude Code and OpenClaw bots had been using for weeks. The end result is that Kilo is no longer the "trial" runtime - it routinely wins head-to-head latency comparisons against the other two (see "Stress test" below).
+The most heterogeneous set, reflecting that Kilo Code was the newest of the three and started furthest from production-readiness. None of these were upstream Kilo Code contributions; they were closecrab-side wrappers that taught Kilo Code how to use facilities Claude Code and OpenClaw bots had been using for weeks. The end result is that Kilo Code is no longer the "trial" runtime - it routinely wins head-to-head latency comparisons against the other two (see "Stress test" below).
 
-**Takeaway:** the cheapest capability transfers are the ones where the source runtime has solved a problem and the target runtime just needs to be _told that the solution exists_. Tool-awareness, script-awareness, prompt-rule absorption - all of these were single-commit gains for Kilo.
+**Takeaway:** the cheapest capability transfers are the ones where the source runtime has solved a problem and the target runtime just needs to be _told that the solution exists_. Tool-awareness, script-awareness, prompt-rule absorption - all of these were single-commit gains for Kilo Code.
 
-## Emergent capabilities (not present in any single runtime)
-
-Three capabilities exist only because three runtimes coexist:
-
-### 1. Cross-runtime model name translation
-
-Each runtime names the same underlying model differently:
-
-| Runtime     | Claude Opus 4.7 model string                       |
-| ----------- | -------------------------------------------------- |
-| Claude Code | `claude-opus-4-7@default`                          |
-| OpenClaw    | `anthropic-vertex/claude-opus-4-7`                 |
-| Kilo        | `google-vertex-anthropic/claude-opus-4-7@default`  |
-
-`scripts/config-manage.py` (`f6647a3`) gained a preset-aware translator. When a bot switches runtime, the model string is rewritten automatically through `_detect_preset` + `_model_for_worker`, with a substring fingerprint fallback for bots that came in misconfigured. No single upstream tool has this capability because no single upstream tool needs it - it's a product of running multiple runtimes side by side.
-
-### 2. Live runtime switching with full state preservation
-
-The closecrab middleware preserves the bot's personality, memory, and team context across runtime switches. A single bot can move between Claude Code, OpenClaw, and Kilo in under 20 seconds with no loss of long-term memory and no manual reconfiguration. The runtime-specific self-healing (OpenClaw's hardlinks and reindex, Kilo's HTTP server spawn, Claude Code's session resume) runs automatically on boot.
-
-### 3. Heterogeneous mutual testing
-
-A bot on runtime A can probe a bot on runtime B for the same capability, and report differences without protocol coupling. This is built directly on top of the Firestore inbox described above - the sender and receiver are mutually invisible across the inbox boundary, including which runtime each one happens to be using. This is how three of the four absorbed-capability discoveries happened: not by us reading source code, but by a bot running on runtime X noticing that its sibling on runtime Y could do something it couldn't.
-
-**Takeaway:** these emergent capabilities are the strongest argument for the heterogeneous-runtime strategy. They are not features anyone is likely to upstream into a single agent CLI, because they only make sense at the orchestration layer above the CLIs.
 
 ## Side discovery: a silent backup regression
 
@@ -445,7 +391,7 @@ The high-level architecture above shows three runtime nodes plus the inbox subst
   <text x="600" y="106" text-anchor="middle" fill="#fff" font-size="14" font-weight="500" font-family="Google Sans, sans-serif">OpenClaw</text>
   <text x="600" y="124" text-anchor="middle" fill="#fff" font-size="11" font-family="Roboto, sans-serif">ACP</text>
   <circle cx="360" cy="260" r="44" fill="#1A73E8"/>
-  <text x="360" y="256" text-anchor="middle" fill="#fff" font-size="14" font-weight="500" font-family="Google Sans, sans-serif">Kilo</text>
+  <text x="360" y="256" text-anchor="middle" fill="#fff" font-size="14" font-weight="500" font-family="Google Sans, sans-serif">Kilo Code</text>
   <text x="360" y="274" text-anchor="middle" fill="#fff" font-size="11" font-family="Roboto, sans-serif">HTTP SSE</text>
   <path d="M 164 110 L 556 110" stroke="#5F6368" stroke-width="1.5" fill="none" marker-end="url(#arr-en)"/>
   <text x="360" y="100" text-anchor="middle" font-size="12" fill="#5F6368" font-family="Roboto, sans-serif">retry resilience + tempfile hygiene</text>
@@ -481,9 +427,9 @@ End-to-end switch time including model translation, bot restart, and runtime sel
 | ----------- | ------------------------------------------------ | -------- |
 | OpenClaw    | `memory_search` + `read` + `exec`, 9 steps       | ~120s    |
 | Claude Code | `Grep` ×3 in one parallel tool_use block         | 42.66s   |
-| Kilo        | `bash` ×3, sequential                            | ~37s     |
+| Kilo Code        | `bash` ×3, sequential                            | ~37s     |
 
-The Kilo time is the surprise: in absolute terms it now beats Claude Code on this workload despite starting the week as the least mature of the three runtimes. The improvement is almost entirely from absorbed capabilities (streaming flush, tool batching rules, faster cold start preserved from native).
+The Kilo Code time is the surprise: in absolute terms it now beats Claude Code on this workload despite starting the week as the least mature of the three runtimes. The improvement is almost entirely from absorbed capabilities (streaming flush, tool batching rules, faster cold start preserved from native).
 
 ## Numbers
 
@@ -495,8 +441,7 @@ The Kilo time is the surprise: in absolute terms it now beats Claude Code on thi
 | Lines added / removed                   | +5,070 / -568        |
 | Capabilities transferred (Claude Code)  | 36 小时                    |
 | Capabilities transferred (OpenClaw)     | 5                    |
-| Capabilities transferred (Kilo)         | 10                   |
-| Emergent capabilities                   | 3                    |
+| Capabilities transferred (Kilo Code)         | 10                   |
 | Infrastructure-side discoveries         | 1 (silent backup)    |
 | `/tmp` leak cleaned                     | 85 → 0               |
 | Memory files / chunks indexed (per bot) | 101 / 282            |
@@ -517,7 +462,6 @@ Pre-experiment, the implicit assumption was that one would eventually pick a "be
 
 - **Diversity is a feature, not transitional debt.** Three runtimes observing the same infrastructure found bugs no single runtime would have found.
 - **Capability transfer is cheap.** Most of the gains were single-commit ports of structurally-similar logic.
-- **Emergent capabilities pay for themselves.** Cross-runtime model translation, live runtime switching, and 异构互测 are all features that exist only because of the heterogeneity.
 
 We will keep all three runtimes in production, continue running the same bot personalities across all three, and treat new runtimes as opportunities to absorb new capabilities rather than as candidates to displace existing ones.
 
@@ -535,7 +479,7 @@ and read the commit pairs side by side. The structural similarity across runtime
 
 ## Acknowledgements
 
-The experiment ran on four bots in a single team. Three of them - bunny (mostly Claude Code), tiemu (mostly OpenClaw), xiaoaitongxue (mostly Kilo) - took turns probing each other and committing the absorbed capabilities. The fourth, the inter-bot Firestore inbox, did not technically run any code but absolutely earned a thank-you for not losing a single message under the day's restart load.
+The experiment ran on four bots in a single team. Three of them - bunny (mostly Claude Code), tiemu (mostly OpenClaw), xiaoaitongxue (mostly Kilo Code) - took turns probing each other and committing the absorbed capabilities. The fourth, the inter-bot Firestore inbox, did not technically run any code but absolutely earned a thank-you for not losing a single message under the day's restart load.
 
 </div>
 
