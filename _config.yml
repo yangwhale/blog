@@ -1,0 +1,35 @@
+title: Chris Yang
+subtitle: GCP / TPU / Inference / Infra notes
+description: >-
+  Technical notes from Chris Yang. Topics: Google Cloud, TPU v7 Ironwood,
+  GPU inference (vLLM / SGLang), LLM training, infrastructure debugging.
+author: Chris Yang
+email: chrisya@google.com
+
+url: "https://blog.higcp.com"
+baseurl: ""
+
+# minima default theme + GCP-style overrides in assets/main.scss + _sass/
+theme: minima
+minima:
+  skin: classic       # white background, will be overridden by our SCSS
+  date_format: "%Y-%m-%d"
+  social_links:
+    - { platform: github, user_url: "https://github.com/yangwhale" }
+
+# UTC posts so HKT readers see correct date
+timezone: Asia/Hong_Kong
+permalink: /:year/:month/:day/:title/
+
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - .bundle/
+  - README.md
+  - .git/

@@ -1,0 +1,41 @@
+---
+# Front matter required for Jekyll to process this file.
+---
+
+// GCP Console / Material Design palette
+$gcp-blue:       #1A73E8;
+$gcp-blue-hover: #185ABC;
+$gcp-bg:         #FFFFFF;
+$gcp-bg-alt:     #F8F9FA;
+$gcp-border:     #E8EAED;
+$gcp-text:       #202124;
+$gcp-text-soft:  #5F6368;
+$gcp-text-muted: #80868B;
+$gcp-code-bg:    #F1F3F4;
+$gcp-success:    #1E8E3E;
+$gcp-warning:    #F9AB00;
+
+// Typography
+$font-sans: "Google Sans", "Roboto", -apple-system, BlinkMacSystemFont,
+            "Segoe UI", Helvetica, Arial, sans-serif;
+$font-mono: "Roboto Mono", "SFMono-Regular", Consolas, "Liberation Mono",
+            Menlo, monospace;
+
+// Minima variables — override BEFORE importing minima
+$base-font-family: $font-sans;
+$base-font-size:   15px;
+$base-line-height: 1.6;
+$brand-color:      $gcp-blue;
+$text-color:       $gcp-text;
+$background-color: $gcp-bg;
+$grey-color:       $gcp-text-soft;
+$grey-color-light: $gcp-border;
+$grey-color-dark:  $gcp-text;
+$content-width:    820px;
+$spacing-unit:     30px;
+$on-palm:          600px;
+$on-laptop:        820px;
+
+// Pull in minima default styles, then layer on our GCP-style overrides.
+@import "minima";
+@import "gcp-overrides";
