@@ -47,7 +47,8 @@ layout: default
               <h3 class="post-card-title">{{ post.title }}</h3>
               {% if post.excerpt %}
                 <p class="post-card-excerpt">
-                  {{ post.excerpt | strip_html | strip_newlines | truncate: 180 }}
+                  {%- assign clean = post.excerpt | strip_html | newline_to_br | replace: "<br />", " " | replace: "<br/>", " " | replace: "<br>", " " -%}
+                  {{ clean | normalize_whitespace | truncate: 180 }}
                 </p>
               {% endif %}
               <span class="post-card-readmore">Read post →</span>
