@@ -30,6 +30,24 @@ lang: zh
 
 ## 背景：MoE 在 TPU 上的历史包袱
 
+### TPU v7 (Ironwood) 硬件概览
+
+在进入具体分析前，先建立 TPU v7 的硬件心智模型：
+
+| 参数 | TPU v7 (Ironwood) | 说明 |
+|------|-------------------|------|
+| 峰值算力 | 4,611 FP8 TFLOPS / 2,306 BF16 TFLOPS | 单 chip |
+| HBM | 192 GiB HBM3e (8-Hi stacks) | 7.4 TB/s 带宽 |
+| ICI 4.0 | 5,376 Gbps (4 links × 1.34 Tb/s) | 3D Torus 拓扑 |
+| 芯片架构 | Dual-Chiplet (2 chiplet/chip) | D2D 带宽 ~8 Tb/s (6× 单 ICI link) |
+| SparseCore | 4 SC/chip (2/chiplet) | 16 tiles/SC, 2.5 MB SPMEM/SC |
+| 计算带宽比 | 623 FLOPS/byte (FP8) | 计算远快于带宽，通信优化至关重要 |
+| Superpod | 9,216 chips | 42.5 Exaflops FP8, 1.77 PB HBM |
+
+一个关键数字：**623 FLOPS/byte 的 FP8 计算带宽比**。这意味着 TPU v7 的计算速度远远快于数据搬运速度——任何通信开销都会直接转化为算力浪费。这是理解后续讨论的基础。
+
+### XLA 的核心约束
+
 TPU 的灵魂是 XLA 编译器。XLA 的核心约束：**所有 tensor 形状必须在编译时确定**。
 
 这和 MoE（Mixture of Experts）的本性直接冲突。MoE 的 router 动态决定每个 token 去哪个 expert——这意味着每个 expert 每 step 收到的 token 数不同，All-to-All 通信的形状是**运行时才知道的**。
@@ -51,6 +69,8 @@ expert_capacity = (total_tokens / num_experts) × capacity_factor
 
 这是一个**工程妥协**：用 padding 和 dropping 换取编译器的欢心。
 
+后来 Google 内部发展了 **Megablox Grouped MatMul**——一个 Pallas kernel 实现（代码位于 `jax/experimental/pallas/ops/tpu/megablox/gmm.py`），将 MoE 的多个 expert matmul 重构为单个 block-sparse matmul，利用 SparseCore 的细粒度 DMA 避免 padding 浪费。但 Megablox 本质上是在"动态形状"前提下做优化——需要复杂的 metadata（token→expert 索引和 ranges），运行时开销不可忽略。
+
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/moe-tpu-conflict.svg" alt="MoE 在 TPU 上的历史矛盾与 K3 的解法" style="width: 100%; max-width: 860px;" />
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">GShard 用 padding 骗过 XLA，K3 让数据本身均匀——从根本上消灭矛盾</figcaption>
@@ -58,7 +78,7 @@ expert_capacity = (total_tokens / num_experts) × capacity_factor
 
 ### 后来者的选择
 
-DeepSeek V3 等 GPU-first 的模型直接放弃了静态形状——在 CUDA 的世界里，动态形状不是大问题。它们用辅助 loss、EPLB 等技术缓解不均，但 All-to-All 仍然是动态的。
+DeepSeek V3 等 GPU-first 的模型直接放弃了静态形状——在 CUDA 的世界里，动态形状不是大问题。它们用辅助 loss、EPLB 等技术缓解不均，但 All-to-All 仍然是动态的。我们实际在 TPU v7 上运行 DeepSeek 系列模型时，MoE routing 的适配是精度调优中最棘手的环节之一。
 
 这让 MoE 在 TPU 上的处境越来越尴尬：**主流 MoE 架构在 GPU 上跑得越好，在 TPU 上就越难移植。**
 
@@ -90,10 +110,10 @@ expert_input_shape = (tokens_per_expert, hidden_dim)  # 编译时常量！
 
 **这不是"缓解"了 MoE-TPU 矛盾——是彻底消灭了矛盾的根源。**
 
-GShard 用 padding 骗过 XLA（形状确实静态了，但 33% 是假数据），K3 让数据本身就是均匀的（100% 真实计算）。
+GShard 用 padding 骗过 XLA（形状确实静态了，但 33% 是假数据）。Megablox 用 block-sparse matmul 避免 padding（但需要复杂的 ragged batch metadata 和运行时索引管理）。K3 让数据本身就是均匀的——不需要 padding，也不需要 Megablox 的 ragged 处理，因为每个 expert 的 batch 大小本身就是编译时常量。
 
 <div class="callout-takeaway">
-<strong>洞察</strong>：GShard 把"动态分配"视为 MoE 的固有属性，试图在不改变路由机制的前提下适配 XLA。K3 质问了这个前提本身——为什么路由必须是动态的？如果均匀分配不损失模型质量，那所有为动态分配付出的工程代价（padding、dropping、辅助 loss、capacity factor 调参）都是不必要的。
+<strong>洞察</strong>：GShard 把"动态分配"视为 MoE 的固有属性，试图在不改变路由机制的前提下适配 XLA。Megablox 接受了这个前提，用更精巧的 Pallas kernel 减少浪费。K3 质问了前提本身——为什么路由必须是动态的？如果均匀分配不损失模型质量，那所有为动态分配付出的工程代价（padding、dropping、辅助 loss、capacity factor 调参、ragged batch metadata）都是不必要的。
 </div>
 
 ### 第二重：静态 All-to-All → XLA 全图编译
@@ -121,24 +141,30 @@ XLA 可以将**整个 MoE forward pass**——包括 router、dispatch、expert 
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">传统 MoE 的 Host-Device 同步阻塞 vs K3 的 XLA 全图编译 + 计算通信 overlap</figcaption>
 </figure>
 
+在 TPU v7 上，ICI 4.0 提供每 chip 5,376 Gbps 的互联带宽（4 条 link × 1.34 Tb/s），通过 3D Torus 拓扑连接。但 623 FLOPS/byte 的计算带宽比意味着：**即使 ICI 带宽已经很高，任何通信阻塞计算的时间窗口都会造成严重的算力浪费**。XLA 全图编译的价值在于将通信操作编排到计算间隙中，实现真正的 zero-bubble overlap。
+
 在 GPU 上，这只是"不错的优化"。在 TPU 上，这是"从勉强能跑到高效运行"的质变。
 
-### 第三重：SparseCore 天然 MoE 协处理器
+### 第三重：SparseCore Collective Offloading
 
-TPU v7 每 chip 有 4 个 SparseCore——独立于 TensorCore 的轻量处理单元，2.4× FLOPs 于 v6e。
+TPU v7 每 chip 有 4 个 SparseCore（2 个/chiplet），每个 SC 包含 16 个 tile 和 2.5 MB SPMEM。SparseCore 是独立于 TensorCore 的轻量处理器，拥有自己的标量控制器（SCS）和 8-wide SIMD 向量单元（SCT），能够作为**独立控制线程**管理 ICI fabric 上的数据移动——这就是 Collective Offloading 的基础。
 
-SparseCore 可以独立处理 MoE routing 的全部开销：
+SparseCore 的一个关键优势是**内存访问粒度**：支持 4-byte 和 32-byte 的 DMA 操作，而 TensorCore 的 systolic array 优化为 512-byte 粒度加载。这种细粒度访问天然适合 MoE 的 token routing——将稀疏的 token 按 expert 分组，然后通过 ICI 发送。
 
-| 任务 | 传统方案 | K3 + SparseCore |
-|------|---------|----------------|
-| Router logit 计算 | TensorCore | **SparseCore** |
-| Token 排序/分配 | TensorCore | **SparseCore** |
-| All-to-All 通信 | TensorCore 等待 | **SparseCore** |
-| Expert FFN 计算 | TensorCore | TensorCore |
+在 MoE 场景下，TPU v7 的计算分工如下（基于 SparseCore 架构文档）：
 
-结果：**TensorCore 100% 用于 expert 计算**。Router 和通信的开销被完全 offload 到 SparseCore，和 expert 计算并行执行。
+| 操作 | 执行单元 | 说明 |
+|------|---------|------|
+| Expert 选择 (gating) | TensorCore | 小型 dense matmul |
+| Token 路由 All-to-All | **SparseCore** | Collective offloading |
+| Expert FFN (dense GEMM) | TensorCore MXU | 主要计算负载 |
+| Token Combine | **SparseCore** | 结果聚合 |
 
-传统 MoE 的动态路由让 SparseCore offload 变得复杂（动态形状的通信难以提前编排）。K3 的静态形状让 SparseCore 可以完全预编排工作负载。
+注意 gating 计算本身仍在 TensorCore 上执行——它是一个小型 dense matmul（router weights × hidden states），SparseCore 的价值不在于替代这个计算，而在于将**后续的 token dispatch、All-to-All 通信和结果 combine 完全 offload**，使其与下一层的 Expert FFN 计算并行。
+
+实测性能：在 pipeline 训练中，Collective Offloading 可实现**最高 2× 提速**；在 MoE All-to-All 场景下，通信延迟被计算掩盖。
+
+K3 的静态形状让这个优势被放大：传统 MoE 的动态路由意味着每个 step 的通信量不同，SparseCore 需要运行时重新规划 DMA 调度。K3 的 Quantile Balancing 保证通信形状恒定，SparseCore 可以在编译时就完全规划好所有 DMA 传输模式，**零运行时调度开销**。
 
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/sparsecore-offload.svg" alt="TPU v7 SparseCore Offload" style="width: 100%; max-width: 860px;" />
@@ -188,7 +214,7 @@ K3 的 3:1 混合架构（3 层 KDA + 1 层 Gated MLA）在 TPU 推理上的优�
 - **Gated MLA 层**：KV cache 57× 压缩（576 维 latent vs 32768 维全展开）
 - **综合**：128K context 下 KV cache 从 280 GB → ~15 GB
 
-TPU v7 每 chip 192 GB HBM3e。传统 MHA 的 280 GB KV cache 需要跨多 chip 分片。K3 的 ~15 GB KV cache 可以**单 chip 放下**，推理时没有跨 chip 通信开销。
+TPU v7 每 chip 配备 192 GiB HBM3e（8-Hi stacks），带宽 7.4 TB/s。传统 MHA 的 280 GB KV cache 需要跨多 chip 分片——跨 chip 意味着 KV cache 读取要走 ICI 而非本地 HBM，延迟增加一个数量级。K3 的 ~15 GB KV cache 仅占单 chip HBM 的 **8%**，不仅可以单 chip 放下，还为模型权重和 activation 留出充裕空间。KV cache 读取完全走本地 HBM 的 7.4 TB/s 带宽，推理时零跨 chip 通信开销。
 
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/kv-cache-revolution.svg" alt="KV Cache 革命" style="width: 100%; max-width: 860px;" />
@@ -203,12 +229,12 @@ K3 团队（Moonshot AI）主要在 NVIDIA GPU 上训练。他们的创新动机
 
 | 创新 | Moonshot 的动机 | TPU 的收益（意外） |
 |------|---------------|-------------------|
-| Quantile Balancing | 消除辅助 loss，简化训练 | **消灭 capacity_factor，解锁 XLA 全图编译** |
+| Quantile Balancing | 消除辅助 loss，简化训练 | **消灭 capacity_factor + Megablox ragged 开销，解锁 XLA 全图编译** |
 | SiTU | 2.8T 规模训练稳定性 | **细节未披露，TPU 对齐待定** |
-| Per-Head Muon | 128× 降低优化器计算成本 | **完美 batch matmul 形式** |
-| Static-Shape EP | GPU 上也有通信优化收益 | **XLA 静态形状的核心要求** |
-| AttnRes | 更好的梯度流 + 模型质量 | **纯矩阵运算，XLA 编译友好** |
-| KDA 3:1 | 长序列推理效率 | **KV cache 单 chip 放下** |
+| Per-Head Muon | 128× 降低优化器计算成本 | **完美 batch matmul，MXU 利用率极高** |
+| Static-Shape EP | GPU 上也有通信优化收益 | **XLA 静态形状的核心要求，解锁 SparseCore Collective Offloading 编译时 DMA 规划** |
+| AttnRes | 更好的梯度流 + 模型质量 | **纯矩阵运算，无条件分支，XLA 编译友好** |
+| KDA 3:1 | 长序列推理效率 | **KV cache 15GB 仅占单 chip 192GiB HBM 的 8%，零跨 chip 通信** |
 
 **每一项创新都有自己的 GPU 动机，但在 TPU 上产生了更大的收益。** 这不是 K3 为 TPU 设计——是 K3 追求的"极致确定性和效率"恰好和 TPU/XLA 的设计哲学高度一致。
 
@@ -235,7 +261,7 @@ def quantile_balance_route(logits, num_experts):
     tokens_per_expert = scores.shape[0] // num_experts
     # 每个 expert 恰好分到 tokens_per_expert 个 token
     assignments = indices.reshape(num_experts, tokens_per_expert)
-    return assignments
+    return assignments  # 形状: (num_experts, tokens_per_expert) — 编译时常量
 
 # 2. 静态 All-to-All
 # 形状已知 → 直接用 jax.lax.all_to_all
@@ -246,23 +272,27 @@ dispatched = jax.lax.all_to_all(
     concat_axis=0
 )
 # 形状完全静态，XLA 编译一次即可
+# 启用 SparseCore Collective Offloading 后，
+# All-to-All 由 SparseCore 独立执行，不阻塞 TensorCore
 ```
+
+TPU v7 的 dual-chiplet 架构带来一个额外的 mesh 维度（on-chip device ID），Expert Parallelism 的 mesh 配置需要考虑 chiplet 间 D2D 带宽（~8 Tb/s，6× ICI link）和跨 chip ICI 带宽的差异。建议将同一 chip 的 2 个 chiplet 优先分配给相邻 expert group，利用 D2D 高带宽做 chip 内 All-to-All。
 
 ### Phase 2: 注意力层
 
-- **KDA**：已有 Pallas kernel 实现（Ling3-flash 团队验证过，70% peak FLOPs）
-- **Gated MLA**：在 MLA 基础上加门控投影，标准矩阵运算
-- **3:1 混合**：层配置，不涉及新 kernel
+- **KDA**：已有 Pallas kernel 实现（Ling3-flash 团队验证过，70% peak FLOPs）。KDA 的线性注意力特性意味着 KV state 大小与序列长度无关——在 TPU 上这消除了 attention 层的 HBM 压力
+- **Gated MLA**：在 MLA 基础上加门控投影，标准矩阵运算。latent_dim=576 的低秩 KV projection 在 MXU 上高效执行
+- **3:1 混合**：层配置，不涉及新 kernel。每 4 层中 3 层 KDA + 1 层 Gated MLA
 
 ### Phase 3: 训练组件
 
-- **AttnRes**：Block 内 softmax attention over layer outputs，标准 attention 实现
-- **Per-Head Muon**：batch matmul NS 正交化，纯 JAX 实现
+- **AttnRes**：Block 内 softmax attention over layer outputs，标准 attention 实现，所有运算（Q/K/V projection、softmax、加权求和）均为 XLA 原生操作
+- **Per-Head Muon**：batch matmul NS 正交化，(128, 7168, 128) 的 batch 维度天然适配 `jax.vmap`
 - **SiTU**：具体公式待 K3 技术报告披露，实现时需参考官方开源代码
 
 ### Phase 4: 量化
 
-- **MXFP4 QAT**：SFT 阶段模拟量化，需要 JAX 的 FP4 仿真支持
+- **MXFP4 QAT**：SFT 阶段模拟量化。TPU v7 原生支持 FP8，MXFP4 需要 JAX 层面的仿真支持，但 SiTU 的有界输出（~[-0.2, 1]）可能降低量化难度
 
 ---
 
@@ -295,5 +325,14 @@ K3 走了一条不同的路。它问了一个简单的问题：**如果路由不
 ---
 
 *本文基于公开信息和理论分析。K3 的完整技术报告尚未发布，部分推理可能与实际实现有差异。欢迎指正。*
+
+### 参考资料
+
+- [OpenXLA SparseCore 深度指南](https://openxla.org/xla/sparsecore) — SparseCore 架构与 Collective Offloading 官方文档
+- [Google Cloud TPU v7 (Ironwood) 文档](https://cloud.google.com/tpu/docs/ironwood-performance) — 性能优化与硬件规格
+- [GShard: Scaling Giant Models with Conditional Computation](https://arxiv.org/abs/2006.16668) — capacity_factor 的起源
+- [Megablox GMM Pallas Kernel](https://github.com/jax-ml/jax/blob/main/jax/experimental/pallas/ops/tpu/megablox/gmm.py) — TPU 上 MoE ragged batch 的 block-sparse 实现
+- [SemiAnalysis: TPU v7 分析](https://newsletter.semianalysis.com/p/tpuv7-google-takes-a-swing-at-the) — SparseCore SCS/SCT 架构细节
+- [JAX TPU Embedding API](https://github.com/jax-ml/jax-tpu-embedding) — SparseCore 编程接口
 
 *2026-07-18 · [blog.higcp.com](https://blog.higcp.com)*

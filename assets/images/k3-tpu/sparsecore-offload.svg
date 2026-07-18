@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 380" font-family="Google Sans, Segoe UI, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 420" font-family="Google Sans, Segoe UI, sans-serif">
   <defs>
     <linearGradient id="tc-grad" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#E8F0FE"/>
@@ -10,73 +10,79 @@
     </linearGradient>
   </defs>
 
-  <rect width="860" height="380" fill="#FAFAFA" rx="8"/>
+  <rect width="860" height="420" fill="#FAFAFA" rx="8"/>
 
   <!-- Title -->
-  <text x="430" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">TPU v7 SparseCore Offload：MoE 路由与 Expert 计算完全并行</text>
+  <text x="430" y="28" text-anchor="middle" font-size="15" font-weight="700" fill="#202124">TPU v7 SparseCore Collective Offloading：计算与通信完全并行</text>
+  <text x="430" y="46" text-anchor="middle" font-size="10" fill="#5F6368">4 SC/chip (2/chiplet) · 16 tiles/SC · 2.5 MB SPMEM/SC · DMA 4-byte 粒度 (vs TensorCore 512-byte)</text>
 
   <!-- TPU Chip outline -->
-  <rect x="40" y="52" width="780" height="310" rx="10" fill="white" stroke="#DADCE0" stroke-width="1.5"/>
-  <text x="430" y="72" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">TPU v7 Chip</text>
+  <rect x="40" y="58" width="780" height="345" rx="10" fill="white" stroke="#DADCE0" stroke-width="1.5"/>
+  <text x="430" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">TPU v7 Chip (Dual-Chiplet · D2D ~8 Tb/s)</text>
 
   <!-- TensorCore section -->
-  <rect x="60" y="85" width="450" height="260" rx="8" fill="url(#tc-grad)" stroke="#1A73E8" stroke-width="1.5"/>
-  <text x="285" y="108" text-anchor="middle" font-size="14" font-weight="700" fill="#1A73E8">TensorCore</text>
-  <text x="285" y="124" text-anchor="middle" font-size="10" fill="#1967D2">100% 用于 Expert 计算</text>
+  <rect x="60" y="92" width="450" height="295" rx="8" fill="url(#tc-grad)" stroke="#1A73E8" stroke-width="1.5"/>
+  <text x="285" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="#1A73E8">TensorCore (MXU)</text>
+  <text x="285" y="131" text-anchor="middle" font-size="10" fill="#1967D2">Expert FFN + Gating 计算</text>
+
+  <!-- Gating block (small, now in TensorCore) -->
+  <rect x="80" y="145" width="130" height="45" rx="6" fill="#FBBC04" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
+  <text x="145" y="166" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">Expert Gating</text>
+  <text x="145" y="180" text-anchor="middle" font-size="8" fill="#B06000">小型 dense matmul</text>
 
   <!-- Expert FFN blocks -->
-  <rect x="80" y="140" width="95" height="65" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
-  <text x="127" y="168" text-anchor="middle" font-size="11" font-weight="500" fill="#1967D2">Expert FFN</text>
-  <text x="127" y="183" text-anchor="middle" font-size="9" fill="#1967D2">Layer 1</text>
+  <rect x="220" y="145" width="95" height="45" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
+  <text x="267" y="166" text-anchor="middle" font-size="10" font-weight="500" fill="#1967D2">Expert FFN</text>
+  <text x="267" y="180" text-anchor="middle" font-size="8" fill="#1967D2">Layer N</text>
 
-  <rect x="185" y="140" width="95" height="65" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
-  <text x="232" y="168" text-anchor="middle" font-size="11" font-weight="500" fill="#1967D2">Expert FFN</text>
-  <text x="232" y="183" text-anchor="middle" font-size="9" fill="#1967D2">Layer 2</text>
-
-  <rect x="290" y="140" width="95" height="65" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
-  <text x="337" y="168" text-anchor="middle" font-size="11" font-weight="500" fill="#1967D2">Expert FFN</text>
-  <text x="337" y="183" text-anchor="middle" font-size="9" fill="#1967D2">Layer 3</text>
-
-  <rect x="395" y="140" width="95" height="65" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
-  <text x="442" y="168" text-anchor="middle" font-size="11" font-weight="500" fill="#1967D2">Expert FFN</text>
-  <text x="442" y="183" text-anchor="middle" font-size="9" fill="#1967D2">Layer 4</text>
+  <rect x="325" y="145" width="95" height="45" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
+  <text x="372" y="166" text-anchor="middle" font-size="10" font-weight="500" fill="#1967D2">Expert FFN</text>
+  <text x="372" y="180" text-anchor="middle" font-size="8" fill="#1967D2">Layer N+1</text>
 
   <!-- Attention blocks -->
-  <rect x="80" y="220" width="200" height="50" rx="6" fill="#34A853" opacity="0.12" stroke="#34A853" stroke-width="1"/>
-  <text x="180" y="247" text-anchor="middle" font-size="11" font-weight="500" fill="#137333">KDA × 3 (线性注意力)</text>
+  <rect x="80" y="205" width="200" height="45" rx="6" fill="#34A853" opacity="0.12" stroke="#34A853" stroke-width="1"/>
+  <text x="180" y="230" text-anchor="middle" font-size="10" font-weight="500" fill="#137333">KDA x 3 (线性注意力)</text>
 
-  <rect x="290" y="220" width="200" height="50" rx="6" fill="#9334E6" opacity="0.1" stroke="#9334E6" stroke-width="1"/>
-  <text x="390" y="247" text-anchor="middle" font-size="11" font-weight="500" fill="#7627BB">Gated MLA × 1</text>
+  <rect x="290" y="205" width="200" height="45" rx="6" fill="#9334E6" opacity="0.1" stroke="#9334E6" stroke-width="1"/>
+  <text x="390" y="230" text-anchor="middle" font-size="10" font-weight="500" fill="#7627BB">Gated MLA x 1</text>
 
-  <!-- AttnRes -->
-  <rect x="80" y="280" width="410" height="30" rx="6" fill="#E8EAED"/>
-  <text x="285" y="300" text-anchor="middle" font-size="10" font-weight="500" fill="#5F6368">AttnRes · Per-Head Muon · SiTU</text>
+  <!-- AttnRes + Muon + SiTU -->
+  <rect x="80" y="265" width="410" height="28" rx="6" fill="#E8EAED"/>
+  <text x="285" y="284" text-anchor="middle" font-size="9" font-weight="500" fill="#5F6368">AttnRes · Per-Head Muon · SiTU</text>
 
-  <!-- Utilization label -->
-  <text x="285" y="332" text-anchor="middle" font-size="13" font-weight="700" fill="#1A73E8">利用率 ≈ 100%</text>
+  <!-- Utilization labels -->
+  <text x="285" y="315" text-anchor="middle" font-size="12" font-weight="700" fill="#1A73E8">MXU 利用率 ≈ 100%</text>
+  <text x="285" y="332" text-anchor="middle" font-size="9" fill="#1967D2">4,611 FP8 TFLOPS 全部用于模型计算</text>
+
+  <!-- Pipeline indicator -->
+  <text x="285" y="365" text-anchor="middle" font-size="10" fill="#5F6368">Pipeline 训练: Collective Offloading 最高 2x 提速</text>
 
   <!-- SparseCore section -->
-  <rect x="530" y="85" width="270" height="260" rx="8" fill="url(#sc-grad)" stroke="#F9AB00" stroke-width="1.5"/>
-  <text x="665" y="108" text-anchor="middle" font-size="14" font-weight="700" fill="#E37400">SparseCore × 4</text>
-  <text x="665" y="124" text-anchor="middle" font-size="10" fill="#E37400">独立处理路由 + 通信</text>
+  <rect x="530" y="92" width="270" height="295" rx="8" fill="url(#sc-grad)" stroke="#F9AB00" stroke-width="1.5"/>
+  <text x="665" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="#E37400">SparseCore x 4</text>
+  <text x="665" y="131" text-anchor="middle" font-size="10" fill="#E37400">独立通信引擎 (SCS + 16 tiles/SC)</text>
 
   <!-- SparseCore tasks -->
-  <rect x="550" y="140" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="160" text-anchor="middle" font-size="11" font-weight="500" fill="#E37400">① Router Logit 计算</text>
-  <text x="665" y="174" text-anchor="middle" font-size="9" fill="#B06000">softmax → quantile 排序</text>
+  <rect x="550" y="145" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
+  <text x="665" y="163" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">① Token Dispatch</text>
+  <text x="665" y="178" text-anchor="middle" font-size="8" fill="#B06000">4-byte DMA 按 expert 分组</text>
 
-  <rect x="550" y="192" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="212" text-anchor="middle" font-size="11" font-weight="500" fill="#E37400">② Token Dispatch</text>
-  <text x="665" y="226" text-anchor="middle" font-size="9" fill="#B06000">quantile balancing 分配</text>
+  <rect x="550" y="197" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
+  <text x="665" y="215" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">② All-to-All (ICI 5,376 Gbps)</text>
+  <text x="665" y="230" text-anchor="middle" font-size="8" fill="#B06000">静态形状 → 编译时 DMA 规划</text>
 
-  <rect x="550" y="244" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="264" text-anchor="middle" font-size="11" font-weight="500" fill="#E37400">③ All-to-All 通信</text>
-  <text x="665" y="278" text-anchor="middle" font-size="9" fill="#B06000">静态形状 → ICI 传输</text>
+  <rect x="550" y="249" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
+  <text x="665" y="267" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">③ Token Combine</text>
+  <text x="665" y="282" text-anchor="middle" font-size="8" fill="#B06000">结果聚合回 TensorCore</text>
 
-  <rect x="550" y="296" width="230" height="36" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="319" text-anchor="middle" font-size="11" font-weight="500" fill="#E37400">④ Token Combine</text>
+  <rect x="550" y="301" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
+  <text x="665" y="319" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">④ Reduce-Scatter / All-Gather</text>
+  <text x="665" y="334" text-anchor="middle" font-size="8" fill="#B06000">FSDP 梯度同步 offload</text>
+
+  <!-- Key insight -->
+  <text x="665" y="370" text-anchor="middle" font-size="9" fill="#E37400" font-weight="600">K3 静态形状 → 零运行时调度开销</text>
 
   <!-- Parallel indicator -->
-  <text x="518" y="210" text-anchor="middle" font-size="24" fill="#34A853">⇄</text>
-  <text x="518" y="228" text-anchor="middle" font-size="8" fill="#34A853" font-weight="600">并行</text>
+  <text x="518" y="220" text-anchor="middle" font-size="24" fill="#34A853">⇄</text>
+  <text x="518" y="238" text-anchor="middle" font-size="8" fill="#34A853" font-weight="600">并行</text>
 </svg>

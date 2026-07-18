@@ -21,7 +21,7 @@
   <text x="350" y="125" text-anchor="middle" font-size="10" fill="#3C4043">消除辅助 loss</text>
   <text x="350" y="139" text-anchor="middle" font-size="10" fill="#3C4043">简化训练超参</text>
   <text x="600" y="125" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">消灭 capacity_factor</text>
-  <text x="600" y="139" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">XLA 全图编译</text>
+  <text x="600" y="139" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">+ Megablox，XLA 全图编译</text>
   <text x="810" y="131" text-anchor="middle" font-size="18">🎯</text>
 
   <!-- Row 2: Static-Shape EP -->
@@ -30,8 +30,8 @@
   <text x="120" y="189" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">Static-Shape EP</text>
   <text x="350" y="183" text-anchor="middle" font-size="10" fill="#3C4043">GPU 通信优化</text>
   <text x="350" y="197" text-anchor="middle" font-size="10" fill="#3C4043">减少 host 同步</text>
-  <text x="600" y="183" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">计算通信完美 overlap</text>
-  <text x="600" y="197" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">零 host-device 同步</text>
+  <text x="600" y="183" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">ICI 5,376 Gbps 全利用</text>
+  <text x="600" y="197" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">SC Offloading 编译时规划</text>
   <text x="810" y="189" text-anchor="middle" font-size="18">🎯</text>
 
   <!-- Row 3: SiTU -->
@@ -48,7 +48,7 @@
   <rect x="30" y="274" width="840" height="52" rx="4" fill="white"/>
   <rect x="38" y="282" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
   <text x="120" y="305" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">Per-Head Muon</text>
-  <text x="350" y="299" text-anchor="middle" font-size="10" fill="#3C4043">128× 降低优化器成本</text>
+  <text x="350" y="299" text-anchor="middle" font-size="10" fill="#3C4043">128x 降低优化器成本</text>
   <text x="350" y="313" text-anchor="middle" font-size="10" fill="#3C4043">per-head 效果更好</text>
   <text x="600" y="299" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">完美 batch matmul</text>
   <text x="600" y="313" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">MXU 利用率极高</text>
@@ -70,8 +70,8 @@
   <text x="120" y="421" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">KDA+MLA 3:1</text>
   <text x="350" y="415" text-anchor="middle" font-size="10" fill="#3C4043">长序列推理效率</text>
   <text x="350" y="429" text-anchor="middle" font-size="10" fill="#3C4043">KV cache 压缩</text>
-  <text x="600" y="415" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">KV cache 单 chip 放下</text>
-  <text x="600" y="429" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">280GB → ~15GB</text>
+  <text x="600" y="415" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">15GB 仅占 192GiB 的 8%</text>
+  <text x="600" y="429" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">零跨 chip 通信 (7.4 TB/s)</text>
   <text x="810" y="421" text-anchor="middle" font-size="18">✅</text>
 
   <!-- Row 7: MXFP4 QAT -->
@@ -80,7 +80,7 @@
   <text x="120" y="479" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">MXFP4 QAT</text>
   <text x="350" y="473" text-anchor="middle" font-size="10" fill="#3C4043">推理部署成本</text>
   <text x="350" y="487" text-anchor="middle" font-size="10" fill="#3C4043">SFT 阶段学量化</text>
-  <text x="600" y="473" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">MXU 原生低精度</text>
-  <text x="600" y="487" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">SiTU 有界 + FP4 = 精度够</text>
+  <text x="600" y="473" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">MXU 原生 FP8</text>
+  <text x="600" y="487" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">SiTU 有界 + 低精度友好</text>
   <text x="810" y="479" text-anchor="middle" font-size="18">✅</text>
 </svg>
