@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="Google Sans, Segoe UI, sans-serif">
+  <rect width="900" height="520" fill="#FAFAFA" rx="8"/>
+
+  <!-- Title -->
+  <text x="450" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">K3 的七重 TPU 契合</text>
+  <text x="450" y="50" text-anchor="middle" font-size="11" fill="#5F6368">每一项 GPU 创新，恰好命中一个 TPU 痛点</text>
+
+  <!-- Headers -->
+  <text x="120" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#F9AB00">K3 创新</text>
+  <text x="350" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">GPU 上的动机</text>
+  <text x="600" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">TPU 上的收益</text>
+  <text x="810" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#1A73E8">契合度</text>
+
+  <!-- Divider -->
+  <line x1="30" y1="92" x2="870" y2="92" stroke="#E8EAED" stroke-width="1"/>
+
+  <!-- Row 1: Quantile Balancing -->
+  <rect x="30" y="100" width="840" height="52" rx="4" fill="#E6F4EA" opacity="0.5"/>
+  <rect x="38" y="108" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="131" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">Quantile Balancing</text>
+  <text x="350" y="125" text-anchor="middle" font-size="10" fill="#3C4043">消除辅助 loss</text>
+  <text x="350" y="139" text-anchor="middle" font-size="10" fill="#3C4043">简化训练超参</text>
+  <text x="600" y="125" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">消灭 capacity_factor</text>
+  <text x="600" y="139" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">XLA 全图编译</text>
+  <text x="810" y="131" text-anchor="middle" font-size="18">🎯</text>
+
+  <!-- Row 2: Static-Shape EP -->
+  <rect x="30" y="158" width="840" height="52" rx="4" fill="white"/>
+  <rect x="38" y="166" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="189" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">Static-Shape EP</text>
+  <text x="350" y="183" text-anchor="middle" font-size="10" fill="#3C4043">GPU 通信优化</text>
+  <text x="350" y="197" text-anchor="middle" font-size="10" fill="#3C4043">减少 host 同步</text>
+  <text x="600" y="183" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">计算通信完美 overlap</text>
+  <text x="600" y="197" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">零 host-device 同步</text>
+  <text x="810" y="189" text-anchor="middle" font-size="18">🎯</text>
+
+  <!-- Row 3: SiTU -->
+  <rect x="30" y="216" width="840" height="52" rx="4" fill="#E6F4EA" opacity="0.5"/>
+  <rect x="38" y="224" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="247" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">SiTU 有界激活</text>
+  <text x="350" y="241" text-anchor="middle" font-size="10" fill="#3C4043">2.8T 训练稳定性</text>
+  <text x="350" y="255" text-anchor="middle" font-size="10" fill="#3C4043">MXFP4 量化配合</text>
+  <text x="600" y="241" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">BF16/MXU 精度友好</text>
+  <text x="600" y="255" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">数值稳定无溢出</text>
+  <text x="810" y="247" text-anchor="middle" font-size="18">✅</text>
+
+  <!-- Row 4: Per-Head Muon -->
+  <rect x="30" y="274" width="840" height="52" rx="4" fill="white"/>
+  <rect x="38" y="282" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="305" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">Per-Head Muon</text>
+  <text x="350" y="299" text-anchor="middle" font-size="10" fill="#3C4043">128× 降低优化器成本</text>
+  <text x="350" y="313" text-anchor="middle" font-size="10" fill="#3C4043">per-head 效果更好</text>
+  <text x="600" y="299" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">完美 batch matmul</text>
+  <text x="600" y="313" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">MXU 利用率极高</text>
+  <text x="810" y="305" text-anchor="middle" font-size="18">✅</text>
+
+  <!-- Row 5: AttnRes -->
+  <rect x="30" y="332" width="840" height="52" rx="4" fill="#E6F4EA" opacity="0.5"/>
+  <rect x="38" y="340" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="363" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">AttnRes</text>
+  <text x="350" y="357" text-anchor="middle" font-size="10" fill="#3C4043">更好的梯度流</text>
+  <text x="350" y="371" text-anchor="middle" font-size="10" fill="#3C4043">+7.5 GPQA-Diamond</text>
+  <text x="600" y="357" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">纯矩阵运算</text>
+  <text x="600" y="371" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">无条件分支 XLA 友好</text>
+  <text x="810" y="363" text-anchor="middle" font-size="18">✅</text>
+
+  <!-- Row 6: KDA 3:1 -->
+  <rect x="30" y="390" width="840" height="52" rx="4" fill="white"/>
+  <rect x="38" y="398" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="421" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">KDA+MLA 3:1</text>
+  <text x="350" y="415" text-anchor="middle" font-size="10" fill="#3C4043">长序列推理效率</text>
+  <text x="350" y="429" text-anchor="middle" font-size="10" fill="#3C4043">KV cache 压缩</text>
+  <text x="600" y="415" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">KV cache 单 chip 放下</text>
+  <text x="600" y="429" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">280GB → ~15GB</text>
+  <text x="810" y="421" text-anchor="middle" font-size="18">✅</text>
+
+  <!-- Row 7: MXFP4 QAT -->
+  <rect x="30" y="448" width="840" height="52" rx="4" fill="#E6F4EA" opacity="0.5"/>
+  <rect x="38" y="456" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
+  <text x="120" y="479" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">MXFP4 QAT</text>
+  <text x="350" y="473" text-anchor="middle" font-size="10" fill="#3C4043">推理部署成本</text>
+  <text x="350" y="487" text-anchor="middle" font-size="10" fill="#3C4043">SFT 阶段学量化</text>
+  <text x="600" y="473" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">MXU 原生低精度</text>
+  <text x="600" y="487" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">SiTU 有界 + FP4 = 精度够</text>
+  <text x="810" y="479" text-anchor="middle" font-size="18">✅</text>
+</svg>

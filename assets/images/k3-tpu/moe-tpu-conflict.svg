@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Google Sans, Segoe UI, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#5F6368"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#EA4335"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#34A853"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="420" fill="#FAFAFA" rx="8"/>
+
+  <!-- Title -->
+  <text x="450" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">MoE 在 TPU 上的历史矛盾与 K3 的解法</text>
+
+  <!-- Left: XLA Requirement -->
+  <rect x="30" y="55" width="250" height="100" rx="8" fill="#E8F0FE" stroke="#1A73E8" stroke-width="1.5"/>
+  <text x="155" y="80" text-anchor="middle" font-size="13" font-weight="600" fill="#1A73E8">TPU / XLA 的要求</text>
+  <text x="155" y="102" text-anchor="middle" font-size="11" fill="#3C4043">所有 tensor 形状</text>
+  <text x="155" y="118" text-anchor="middle" font-size="11" fill="#3C4043">必须在编译时确定</text>
+  <text x="155" y="140" text-anchor="middle" font-size="20">🔒</text>
+
+  <!-- Right: MoE Nature -->
+  <rect x="620" y="55" width="250" height="100" rx="8" fill="#FEF7E0" stroke="#F9AB00" stroke-width="1.5"/>
+  <text x="745" y="80" text-anchor="middle" font-size="13" font-weight="600" fill="#E37400">MoE 的本性</text>
+  <text x="745" y="102" text-anchor="middle" font-size="11" fill="#3C4043">每个 expert 每 step</text>
+  <text x="745" y="118" text-anchor="middle" font-size="11" fill="#3C4043">收到的 token 数不同</text>
+  <text x="745" y="140" text-anchor="middle" font-size="20">🔀</text>
+
+  <!-- Conflict Arrow -->
+  <line x1="280" y1="105" x2="620" y2="105" stroke="#EA4335" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="450" y="98" text-anchor="middle" font-size="13" font-weight="600" fill="#EA4335">⚡ 根本矛盾 ⚡</text>
+
+  <!-- GShard Solution (middle-left) -->
+  <rect x="60" y="195" width="340" height="180" rx="8" fill="#FFF" stroke="#E8EAED" stroke-width="1"/>
+  <rect x="60" y="195" width="340" height="32" rx="8" fill="#FCE8E6"/>
+  <text x="230" y="216" text-anchor="middle" font-size="12" font-weight="600" fill="#C5221F">GShard 的妥协方案 (2020)</text>
+
+  <!-- GShard Expert Bars -->
+  <text x="80" y="252" font-size="10" fill="#5F6368">Expert 1</text>
+  <rect x="140" y="240" width="120" height="16" rx="3" fill="#34A853" opacity="0.7"/>
+  <rect x="260" y="240" width="50" height="16" rx="3" fill="#E8EAED" stroke="#DADCE0" stroke-width="0.5" stroke-dasharray="3,2"/>
+  <text x="285" y="252" text-anchor="middle" font-size="8" fill="#9AA0A6">padding</text>
+
+  <text x="80" y="276" font-size="10" fill="#5F6368">Expert 2</text>
+  <rect x="140" y="264" width="170" height="16" rx="3" fill="#34A853" opacity="0.7"/>
+  <rect x="310" y="264" width="30" height="16" rx="3" fill="#EA4335" opacity="0.3"/>
+  <text x="325" y="276" text-anchor="middle" font-size="8" fill="#EA4335">drop</text>
+
+  <text x="80" y="300" font-size="10" fill="#5F6368">Expert 3</text>
+  <rect x="140" y="288" width="80" height="16" rx="3" fill="#34A853" opacity="0.7"/>
+  <rect x="220" y="288" width="90" height="16" rx="3" fill="#E8EAED" stroke="#DADCE0" stroke-width="0.5" stroke-dasharray="3,2"/>
+  <text x="265" y="300" text-anchor="middle" font-size="8" fill="#9AA0A6">padding</text>
+
+  <!-- GShard Stats -->
+  <text x="230" y="335" text-anchor="middle" font-size="10" fill="#EA4335">~33% 算力浪费 + 信息丢失</text>
+  <text x="230" y="352" text-anchor="middle" font-size="10" fill="#5F6368">XLA ✓（形状静态）但代价大</text>
+
+  <!-- K3 Solution (middle-right) -->
+  <rect x="500" y="195" width="370" height="180" rx="8" fill="#FFF" stroke="#E8EAED" stroke-width="1"/>
+  <rect x="500" y="195" width="370" height="32" rx="8" fill="#E6F4EA"/>
+  <text x="685" y="216" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">K3 Quantile Balancing (2026)</text>
+
+  <!-- K3 Expert Bars - all equal -->
+  <text x="520" y="252" font-size="10" fill="#5F6368">Expert 1</text>
+  <rect x="585" y="240" width="140" height="16" rx="3" fill="#1A73E8" opacity="0.7"/>
+  <text x="735" y="252" font-size="10" fill="#34A853">N/E ✓</text>
+
+  <text x="520" y="276" font-size="10" fill="#5F6368">Expert 2</text>
+  <rect x="585" y="264" width="140" height="16" rx="3" fill="#1A73E8" opacity="0.7"/>
+  <text x="735" y="276" font-size="10" fill="#34A853">N/E ✓</text>
+
+  <text x="520" y="300" font-size="10" fill="#5F6368">Expert 3</text>
+  <rect x="585" y="288" width="140" height="16" rx="3" fill="#1A73E8" opacity="0.7"/>
+  <text x="735" y="300" font-size="10" fill="#34A853">N/E ✓</text>
+
+  <!-- K3 Stats -->
+  <text x="685" y="335" text-anchor="middle" font-size="10" fill="#34A853">0% 浪费 · 零 padding · 零 drop</text>
+  <text x="685" y="352" text-anchor="middle" font-size="10" fill="#1A73E8">XLA ✓（数据本身均匀）✨</text>
+
+  <!-- Bottom comparison arrow -->
+  <text x="450" y="405" text-anchor="middle" font-size="11" fill="#5F6368">从"骗编译器"到"数据本身就是编译器想要的形状"</text>
+</svg>

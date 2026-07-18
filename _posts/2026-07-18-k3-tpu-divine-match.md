@@ -12,6 +12,10 @@ lang: zh
 .callout-warn { background: #FCE8E6; border-left: 4px solid #C5221F; padding: 12px 16px; margin: 14px 0 22px; border-radius: 4px; font-size: 14px; color: #3C4043; }
 </style>
 
+<figure style="margin: 0 0 24px; text-align: center;">
+<img src="https://cc.higcp.com/assets/imagen/A-dramatic-wide-angle-digital-20260718-053349.png" alt="K3 与 TPU 的天赐良缘" style="width: 100%; max-width: 800px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.12);" />
+</figure>
+
 <div class="callout-lede">
 <strong>声明</strong>：本文是纯理论分析和猜想，尚未经过工程验证。K3 的部分技术细节基于公开信息和推理，可能与实际实现有出入。但我们认为这个方向值得探索——如果 K3 的架构设计真的和 TPU 如此契合，那这可能是 2026 年最值得尝试的 MoE-on-TPU 移植项目。
 </div>
@@ -47,6 +51,11 @@ expert_capacity = (total_tokens / num_experts) × capacity_factor
 
 这是一个**工程妥协**：用 padding 和 dropping 换取编译器的欢心。
 
+<figure style="margin: 24px 0; text-align: center;">
+<img src="/assets/images/k3-tpu/moe-tpu-conflict.svg" alt="MoE 在 TPU 上的历史矛盾与 K3 的解法" style="width: 100%; max-width: 860px;" />
+<figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">GShard 用 padding 骗过 XLA，K3 让数据本身均匀——从根本上消灭矛盾</figcaption>
+</figure>
+
 ### 后来者的选择
 
 DeepSeek V3 等 GPU-first 的模型直接放弃了静态形状——在 CUDA 的世界里，动态形状不是大问题。它们用辅助 loss、EPLB 等技术缓解不均，但 All-to-All 仍然是动态的。
@@ -58,6 +67,11 @@ DeepSeek V3 等 GPU-first 的模型直接放弃了静态形状——在 CUDA 的
 ## K3 的七重契合
 
 然后 K3 来了。它的创新不是为 TPU 设计的，但每一项都精准命中了 TPU 的需求。
+
+<figure style="margin: 24px 0; text-align: center;">
+<img src="/assets/images/k3-tpu/seven-alignments.svg" alt="K3 的七重 TPU 契合" style="width: 100%; max-width: 860px;" />
+<figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">每一项 GPU 创新，恰好命中一个 TPU 痛点</figcaption>
+</figure>
 
 ### 第一重：Quantile Balancing → 消灭 capacity_factor
 
@@ -102,6 +116,11 @@ Quantile Balancing 的均匀分配直接导出一个推论：**All-to-All 通信
 
 XLA 可以将**整个 MoE forward pass**——包括 router、dispatch、expert FFN、combine——编译成一个优化的 HLO 图。计算和通信在编译时就规划好了 overlap 策略。
 
+<figure style="margin: 24px 0; text-align: center;">
+<img src="/assets/images/k3-tpu/static-vs-dynamic.svg" alt="动态 vs 静态 All-to-All" style="width: 100%; max-width: 860px;" />
+<figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">传统 MoE 的 Host-Device 同步阻塞 vs K3 的 XLA 全图编译 + 计算通信 overlap</figcaption>
+</figure>
+
 在 GPU 上，这只是"不错的优化"。在 TPU 上，这是"从勉强能跑到高效运行"的质变。
 
 ### 第三重：SparseCore 天然 MoE 协处理器
@@ -120,6 +139,11 @@ SparseCore 可以独立处理 MoE routing 的全部开销：
 结果：**TensorCore 100% 用于 expert 计算**。Router 和通信的开销被完全 offload 到 SparseCore，和 expert 计算并行执行。
 
 传统 MoE 的动态路由让 SparseCore offload 变得复杂（动态形状的通信难以提前编排）。K3 的静态形状让 SparseCore 可以完全预编排工作负载。
+
+<figure style="margin: 24px 0; text-align: center;">
+<img src="/assets/images/k3-tpu/sparsecore-offload.svg" alt="TPU v7 SparseCore Offload" style="width: 100%; max-width: 860px;" />
+<figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">TensorCore 100% 用于 Expert 计算，路由和通信全部 offload 到 SparseCore 并行执行</figcaption>
+</figure>
 
 ### 第四重：SiTU 有界激活 → MXU 对齐友好
 
@@ -169,6 +193,11 @@ K3 的 3:1 混合架构（3 层 KDA + 1 层 Gated MLA）在 TPU 推理上的优�
 - **综合**：128K context 下 KV cache 从 280 GB → ~15 GB
 
 TPU v7 每 chip 192 GB HBM3e。传统 MHA 的 280 GB KV cache 需要跨多 chip 分片。K3 的 ~15 GB KV cache 可以**单 chip 放下**，推理时没有跨 chip 通信开销。
+
+<figure style="margin: 24px 0; text-align: center;">
+<img src="/assets/images/k3-tpu/kv-cache-revolution.svg" alt="KV Cache 革命" style="width: 100%; max-width: 860px;" />
+<figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">从 280GB 到 15GB——KDA 3:1 + Gated MLA 让 TPU 单 chip 承载 256K 上下文</figcaption>
+</figure>
 
 ---
 
