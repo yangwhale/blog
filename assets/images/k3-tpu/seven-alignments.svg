@@ -37,12 +37,12 @@
   <!-- Row 3: SiTU -->
   <rect x="30" y="216" width="840" height="52" rx="4" fill="#E6F4EA" opacity="0.5"/>
   <rect x="38" y="224" width="164" height="36" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
-  <text x="120" y="247" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">SiTU 有界激活</text>
+  <text x="120" y="247" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">SiTU 激活</text>
   <text x="350" y="241" text-anchor="middle" font-size="10" fill="#3C4043">2.8T 训练稳定性</text>
-  <text x="350" y="255" text-anchor="middle" font-size="10" fill="#3C4043">MXFP4 量化配合</text>
-  <text x="600" y="241" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">BF16/MXU 精度友好</text>
-  <text x="600" y="255" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">数值稳定无溢出</text>
-  <text x="810" y="247" text-anchor="middle" font-size="18">✅</text>
+  <text x="350" y="255" text-anchor="middle" font-size="10" fill="#3C4043">有界输出 [-0.2, 1]</text>
+  <text x="600" y="241" text-anchor="middle" font-size="10" fill="#9AA0A6">细节未披露</text>
+  <text x="600" y="255" text-anchor="middle" font-size="10" fill="#9AA0A6">TPU 对齐待定</text>
+  <text x="810" y="247" text-anchor="middle" font-size="18">❓</text>
 
   <!-- Row 4: Per-Head Muon -->
   <rect x="30" y="274" width="840" height="52" rx="4" fill="white"/>

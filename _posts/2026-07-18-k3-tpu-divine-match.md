@@ -145,17 +145,13 @@ SparseCore 可以独立处理 MoE routing 的全部开销：
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">TensorCore 100% 用于 Expert 计算，路由和通信全部 offload 到 SparseCore 并行执行</figcaption>
 </figure>
 
-### 第四重：SiTU 有界激活 → MXU 对齐友好
+### 第四重：SiTU 激活函数 → 待定
 
-K3 的 SiTU 激活函数输出被限制在 [-0.2, 1] 的有界范围内。
+K3 在 MoE expert 中使用了名为 **SiTU** 的自定义激活函数，替代传统的 SwiGLU。目前 K3 技术报告尚未披露 SiTU 的完整公式和设计细节，仅知其输出有界（约 [-0.2, 1]）且在 2.8T token 规模训练中表现稳定。
 
-对 TPU 的 MXU（Matrix Multiply Unit）来说，有界值意味着：
-
-1. **BF16 精度充分利用**：有界范围内 BF16 的有效精度更高（不浪费 bit 在大指数上）
-2. **量化友好**：如果做 INT8/FP8 推理，有界激活的量化误差远小于无界激活
-3. **数值稳定**：MXU 的累加器精度有限，有界输入减少溢出风险
-
-这和 MXFP4 QAT 的协同效应更明显——SiTU 的有界范围让 4-bit 的 16 个离散值能有效覆盖整个激活分布，而不是被少数 outlier 拉偏。
+<div class="callout-lede">
+<strong>诚实声明</strong>：在 SiTU 的详细设计公开之前，我们无法严格论证它与 TPU MXU 的对齐关系。有界激活<em>可能</em>有利于低精度计算和量化，但这属于合理推测，不是确定结论。本文将此列为"待验证"项，待 K3 完整技术报告发布后再更新分析。
+</div>
 
 ### 第五重：Per-Head Muon → 完美 batch matmul
 
@@ -208,7 +204,7 @@ K3 团队（Moonshot AI）主要在 NVIDIA GPU 上训练。他们的创新动机
 | 创新 | Moonshot 的动机 | TPU 的收益（意外） |
 |------|---------------|-------------------|
 | Quantile Balancing | 消除辅助 loss，简化训练 | **消灭 capacity_factor，解锁 XLA 全图编译** |
-| SiTU | 2.8T 规模训练稳定性 | **MXU 精度友好 + 量化友好** |
+| SiTU | 2.8T 规模训练稳定性 | **细节未披露，TPU 对齐待定** |
 | Per-Head Muon | 128× 降低优化器计算成本 | **完美 batch matmul 形式** |
 | Static-Shape EP | GPU 上也有通信优化收益 | **XLA 静态形状的核心要求** |
 | AttnRes | 更好的梯度流 + 模型质量 | **纯矩阵运算，XLA 编译友好** |
@@ -262,7 +258,7 @@ dispatched = jax.lax.all_to_all(
 
 - **AttnRes**：Block 内 softmax attention over layer outputs，标准 attention 实现
 - **Per-Head Muon**：batch matmul NS 正交化，纯 JAX 实现
-- **SiTU**：`jax.nn.sigmoid(x) * jnp.tanh(x)`，一行代码
+- **SiTU**：具体公式待 K3 技术报告披露，实现时需参考官方开源代码
 
 ### Phase 4: 量化
 
@@ -300,4 +296,4 @@ K3 走了一条不同的路。它问了一个简单的问题：**如果路由不
 
 *本文基于公开信息和理论分析。K3 的完整技术报告尚未发布，部分推理可能与实际实现有差异。欢迎指正。*
 
-*Chris Yang · 2026-07-18 · [blog.higcp.com](https://blog.higcp.com)*
+*2026-07-18 · [blog.higcp.com](https://blog.higcp.com)*
