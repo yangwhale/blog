@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "猜想：Kimi K3 是 TPU 的天赐良缘"
+title: "猜想：K3 可能是最适合 TPU 的 MoE 架构 — 当极致确定性遇上极致静态编译"
 date: 2026-07-18 05:00:00 +0000
 categories: [tpu, moe, architecture]
 lang: zh
