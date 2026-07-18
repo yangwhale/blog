@@ -84,9 +84,9 @@ DeepSeek V3 等 GPU-first 的模型直接放弃了静态形状——在 CUDA 的
 
 ---
 
-## K3 的七重契合
+## K3 的七项创新逐一审视
 
-然后 K3 来了。它的创新不是为 TPU 设计的，但每一项都精准命中了 TPU 的需求。
+然后 K3 来了。它有 7 项架构创新——但我们需要诚实地逐一检验：哪些真的对 TPU 有专属收益，哪些是通用优化。
 
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/seven-alignments.svg" alt="K3 的七重 TPU 契合" style="width: 100%; max-width: 860px;" />
@@ -193,14 +193,13 @@ K3 的 Per-Head Muon 将 Newton-Schulz 正交化按 attention head 粒度执行�
 <strong>诚实说明</strong>：Per-Head Muon 的 128× 计算降低是<strong>通用优化</strong>，在 GPU 和 TPU 上同样有效。batch matmul 在 CUDA 的 batched CUBLAS 和 TPU 的 MXU 上都能高效执行。我们不宜将此标为"TPU 专属契合"。它是 K3 的一个好设计——降低了优化器开销、简化了实现——但不属于本文讨论的"TPU 特殊收益"范畴。
 </div>
 
-### 第六重：AttnRes → 无条件分支，XLA 友好
+### 第六重：AttnRes → 通用优化（非 TPU 专属）
 
-AttnRes 用 softmax attention 替代传统残差连接。从 XLA 的角度：
+AttnRes 用 softmax attention 替代传统残差连接，在 GPQA-Diamond 上带来 +7.5 分的质量提升。
 
-- 传统残差：`x + F(x)` — 简单但固定
-- AttnRes：`softmax(Q · K) · V` — 更复杂但**完全由矩阵运算组成**
-
-AttnRes 的所有操作（矩阵乘、softmax、加权求和）都是 XLA 原生支持的标准操作。没有条件分支、没有动态形状、没有 host callback。整个 Block AttnRes 可以被 XLA 编译成一个高效的 HLO 子图。
+<div class="callout-lede">
+<strong>诚实说明</strong>：AttnRes 的所有操作（矩阵乘、softmax、加权求和）确实是 XLA 原生支持的标准操作。但它替代的传统残差 <code>x + F(x)</code> 同样全是矩阵运算、同样没有条件分支、同样 XLA 友好。AttnRes 不会<em>改善</em> TPU 上的编译效率——它是一个模型质量改进，在 GPU 和 TPU 上同样有效。
+</div>
 
 ### 第七重：KDA + Gated MLA 3:1 混合 → 推理内存革命
 
@@ -210,7 +209,13 @@ K3 的 3:1 混合架构（3 层 KDA + 1 层 Gated MLA）在 TPU 推理上的优�
 - **Gated MLA 层**：KV cache 57× 压缩（576 维 latent vs 32768 维全展开）
 - **综合**：128K context 下 KV cache 从 280 GB → ~15 GB
 
-TPU v7 每 chip 配备 192 GiB HBM3e（8-Hi stacks），带宽 7.4 TB/s。传统 MHA 的 280 GB KV cache 需要跨多 chip 分片——跨 chip 意味着 KV cache 读取要走 ICI 而非本地 HBM，延迟增加一个数量级。K3 的 ~15 GB KV cache 仅占单 chip HBM 的 **8%**，不仅可以单 chip 放下，还为模型权重和 activation 留出充裕空间。KV cache 读取完全走本地 HBM 的 7.4 TB/s 带宽，推理时零跨 chip 通信开销。
+KV cache 从 280 GB 降到 ~15 GB，这个压缩比在 GPU 上同样有效——H100（80 GB）或 B200（192 GB）都能从"需要多卡分片"变成"单卡放下"。**但 TPU 上的收益有一个额外维度**：
+
+GPU 推理框架可以用 PagedAttention 动态分配 KV cache——短序列只分配少量显存，按需增长。TPU/XLA 做不到这一点：**所有 tensor 形状必须在编译时确定**，KV cache 必须按最大序列长度一次性预分配。这意味着传统 MHA 在 TPU 上推理时，即使实际序列只有 1K token，也要预留 280 GB（按 128K 编译）。
+
+KDA 的线性注意力彻底消除了这个问题：它的 KV state 大小与序列长度无关——是一个编译时常量，约 1.6 MB/层。不存在"预分配浪费"的概念。
+
+TPU v7 每 chip 配备 192 GiB HBM3e（8-Hi stacks），带宽 7.4 TB/s。K3 的 ~15 GB KV cache 仅占单 chip HBM 的 **8%**，推理时完全走本地 HBM 的 7.4 TB/s 带宽，零跨 chip 通信开销。
 
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/kv-cache-revolution.svg" alt="KV Cache 革命" style="width: 100%; max-width: 860px;" />
@@ -229,10 +234,10 @@ K3 团队（Moonshot AI）主要在 NVIDIA GPU 上训练。他们的创新动机
 | SiTU | 2.8T 规模训练稳定性 | **细节未披露，TPU 对齐待定** |
 | Per-Head Muon | 128× 降低优化器计算成本 | 通用优化，GPU/TPU 同样受益 |
 | Static-Shape EP | GPU 上也有通信优化收益 | **XLA 静态形状的核心要求，解锁 SparseCore Collective Offloading 编译时 DMA 规划** |
-| AttnRes | 更好的梯度流 + 模型质量 | **纯矩阵运算，无条件分支，XLA 编译友好** |
-| KDA 3:1 | 长序列推理效率 | **KV cache 15GB 仅占单 chip 192GiB HBM 的 8%，零跨 chip 通信** |
+| AttnRes | 更好的梯度流 + 模型质量 | 通用优化（传统残差同样 XLA 友好） |
+| KDA 3:1 | 长序列推理效率 | **KV cache 压缩通用受益 + KDA 常数 state 消除 TPU 静态预分配浪费** |
 
-**每一项创新都有自己的 GPU 动机，但在 TPU 上产生了更大的收益。** 这不是 K3 为 TPU 设计——是 K3 追求的"极致确定性和效率"恰好和 TPU/XLA 的设计哲学高度一致。
+诚实地讲：7 项创新中，**3 项有明确的 TPU 专属收益**（Quantile Balancing、Static-Shape EP、SparseCore Offloading），**1 项有部分 TPU 优势**（KDA 的常数 state 消除 XLA 静态预分配浪费），**1 项待定**（SiTU），**2 项是通用优化**（Per-Head Muon、AttnRes）。但核心的 3 项——路由均匀化、形状静态化、SparseCore 卸载——恰好命中的是 MoE-on-TPU 最根本的架构矛盾。
 
 <div class="callout-takeaway">
 <strong>更深层的洞察</strong>：TPU/XLA 从第一天起就要求"一切在编译时确定"。GPU/CUDA 从第一天起就允许"运行时再说"。过去 6 年，MoE 架构在 CUDA 的自由度中演化，积累了大量"运行时动态"的设计习惯（动态路由、动态 capacity、动态通信）。K3 是第一个在 GPU 上训练、但主动放弃这些动态自由度的模型——因为 Moonshot 发现确定性带来的质量和效率收益大于灵活性的损失。这让 K3 的架构意外地回到了 TPU/XLA 的设计哲学上。
