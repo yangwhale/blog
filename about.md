@@ -4,7 +4,7 @@ title: About
 permalink: /about/
 ---
 
-Chris Yang (杨海舰), Cloud AI Infra at Google.
+Chris Yang, Cloud AI Infra at Google.
 
 Working on TPU v7 (Ironwood), GPU inference systems, and large-scale model
 training infrastructure. Based in Hong Kong.
