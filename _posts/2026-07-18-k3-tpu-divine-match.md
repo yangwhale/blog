@@ -86,7 +86,7 @@ DeepSeek V3 等 GPU-first 的模型直接放弃了静态形状——在 CUDA 的
 
 ## K3 的七项创新逐一审视
 
-然后 K3 来了。它有 7 项架构创新——但我们需要诚实地逐一检验：哪些真的对 TPU 有专属收益，哪些是通用优化。
+然后 K3 来了。它有 7 项架构创新，每一项都有自己的 GPU 动机。我们需要逐一审视的问题不是"这在 TPU 上能不能用"——而是**"这个创新在 TPU 上产生的边际收益，是否远大于它在 GPU 上的边际收益"**。换句话说：GPU 上是锦上添花的东西，在 TPU 上是不是意外地补上了一块关键短板？
 
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/seven-alignments.svg" alt="K3 的七重 TPU 契合" style="width: 100%; max-width: 860px;" />
@@ -179,7 +179,7 @@ K3 在 MoE expert 中使用了名为 **SiTU** 的自定义激活函数，替代�
 <strong>诚实声明</strong>：在 SiTU 的详细设计公开之前，我们无法严格论证它与 TPU MXU 的对齐关系。有界激活<em>可能</em>有利于低精度计算和量化，但这属于合理推测，不是确定结论。本文将此列为"待验证"项，待 K3 完整技术报告发布后再更新分析。
 </div>
 
-### 第五重：Per-Head Muon → 通用优化（非 TPU 专属）
+### 第五重：Per-Head Muon → 好设计，但 TPU 边际收益不突出
 
 K3 的 Per-Head Muon 将 Newton-Schulz 正交化按 attention head 粒度执行——128 个 (7168 × 128) 的独立正交化，核心运算 X^T @ X 从 (16384, 16384) 降为 128 个 (128, 128)，计算量降低 128×。
 
@@ -189,17 +189,11 @@ K3 的 Per-Head Muon 将 Newton-Schulz 正交化按 attention head 粒度执行�
 # 计算量: O(7168 × 16384²) → O(128 × 7168 × 128²) = 128× 降低
 ```
 
-<div class="callout-lede">
-<strong>诚实说明</strong>：Per-Head Muon 的 128× 计算降低是<strong>通用优化</strong>，在 GPU 和 TPU 上同样有效。batch matmul 在 CUDA 的 batched CUBLAS 和 TPU 的 MXU 上都能高效执行。我们不宜将此标为"TPU 专属契合"。它是 K3 的一个好设计——降低了优化器开销、简化了实现——但不属于本文讨论的"TPU 特殊收益"范畴。
-</div>
+Per-Head Muon 的 128× 计算降低是优秀的工程设计，但 GPU 和 TPU 的边际收益相当——batch matmul 在 CUDA 的 batched CUBLAS 和 TPU 的 MXU 上都能高效执行。它没有意外补上 TPU 的某个短板。
 
-### 第六重：AttnRes → 通用优化（非 TPU 专属）
+### 第六重：AttnRes → 好设计，但 TPU 边际收益不突出
 
-AttnRes 用 softmax attention 替代传统残差连接，在 GPQA-Diamond 上带来 +7.5 分的质量提升。
-
-<div class="callout-lede">
-<strong>诚实说明</strong>：AttnRes 的所有操作（矩阵乘、softmax、加权求和）确实是 XLA 原生支持的标准操作。但它替代的传统残差 <code>x + F(x)</code> 同样全是矩阵运算、同样没有条件分支、同样 XLA 友好。AttnRes 不会<em>改善</em> TPU 上的编译效率——它是一个模型质量改进，在 GPU 和 TPU 上同样有效。
-</div>
+AttnRes 用 softmax attention 替代传统残差连接，在 GPQA-Diamond 上带来 +7.5 分的质量提升。AttnRes 的所有操作（矩阵乘、softmax、加权求和）是 XLA 原生操作——但它替代的传统残差 `x + F(x)` 同样是纯矩阵运算、同样 XLA 友好。AttnRes 在 GPU 和 TPU 上产生相同的质量收益，TPU 侧没有额外的边际增量。
 
 ### 第七重：KDA + Gated MLA 3:1 混合 → 推理内存革命
 
@@ -232,12 +226,14 @@ K3 团队（Moonshot AI）主要在 NVIDIA GPU 上训练。他们的创新动机
 |------|---------------|-------------------|
 | Quantile Balancing | 消除辅助 loss，简化训练 | **消灭 capacity_factor + Megablox ragged 开销，解锁 XLA 全图编译** |
 | SiTU | 2.8T 规模训练稳定性 | **细节未披露，TPU 对齐待定** |
-| Per-Head Muon | 128× 降低优化器计算成本 | 通用优化，GPU/TPU 同样受益 |
+| Per-Head Muon | 128× 降低优化器计算成本 | GPU/TPU 边际收益相当 |
 | Static-Shape EP | GPU 上也有通信优化收益 | **XLA 静态形状的核心要求，解锁 SparseCore Collective Offloading 编译时 DMA 规划** |
-| AttnRes | 更好的梯度流 + 模型质量 | 通用优化（传统残差同样 XLA 友好） |
+| AttnRes | 更好的梯度流 + 模型质量 | GPU/TPU 边际收益相当 |
 | KDA 3:1 | 长序列推理效率 | **KV cache 压缩通用受益 + KDA 常数 state 消除 TPU 静态预分配浪费** |
 
-诚实地讲：7 项创新中，**3 项有明确的 TPU 专属收益**（Quantile Balancing、Static-Shape EP、SparseCore Offloading），**1 项有部分 TPU 优势**（KDA 的常数 state 消除 XLA 静态预分配浪费），**1 项待定**（SiTU），**2 项是通用优化**（Per-Head Muon、AttnRes）。但核心的 3 项——路由均匀化、形状静态化、SparseCore 卸载——恰好命中的是 MoE-on-TPU 最根本的架构矛盾。
+诚实地讲：7 项创新中，**3 项在 TPU 上的边际收益远大于 GPU**（Quantile Balancing 消灭了 TPU 独有的 capacity_factor 痛点；Static-Shape EP 解锁了 XLA 全图编译这个 GPU 不需要的能力；SparseCore Offloading 利用了 TPU 独有的硬件），**1 项在 TPU 上有额外放大效应**（KDA 的常数 state 消除了 XLA 静态预分配造成的内存浪费——GPU 用 PagedAttention 本来就没这个问题），**1 项待定**（SiTU），**2 项 GPU/TPU 边际收益相当**（Per-Head Muon、AttnRes 都是好设计，但没有意外补上 TPU 的短板）。
+
+关键在于：前 3 项命中的恰好是 MoE-on-TPU **最致命**的短板——动态形状、编译断裂、通信阻塞计算。在 GPU 上这些从来不是问题，所以 K3 解决它们只是锦上添花。在 TPU 上，这是"从不可行到高效可行"的质变。
 
 <div class="callout-takeaway">
 <strong>更深层的洞察</strong>：TPU/XLA 从第一天起就要求"一切在编译时确定"。GPU/CUDA 从第一天起就允许"运行时再说"。过去 6 年，MoE 架构在 CUDA 的自由度中演化，积累了大量"运行时动态"的设计习惯（动态路由、动态 capacity、动态通信）。K3 是第一个在 GPU 上训练、但主动放弃这些动态自由度的模型——因为 Moonshot 发现确定性带来的质量和效率收益大于灵活性的损失。这让 K3 的架构意外地回到了 TPU/XLA 的设计哲学上。

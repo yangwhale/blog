@@ -2,8 +2,8 @@
   <rect width="900" height="520" fill="#FAFAFA" rx="8"/>
 
   <!-- Title -->
-  <text x="450" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">K3 七项创新的 TPU 契合度审视</text>
-  <text x="450" y="50" text-anchor="middle" font-size="11" fill="#5F6368">🎯 TPU 专属 · ⚡ 部分 TPU 优势 · ❓ 待定 · ➖ 通用优化</text>
+  <text x="450" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">K3 七项创新：TPU 边际收益审视</text>
+  <text x="450" y="50" text-anchor="middle" font-size="11" fill="#5F6368">🎯 TPU 边际收益远大于 GPU · ⚡ TPU 额外放大 · ❓ 待定 · ➖ GPU/TPU 收益相当</text>
 
   <!-- Headers -->
   <text x="120" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="#F9AB00">K3 创新</text>
