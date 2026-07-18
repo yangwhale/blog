@@ -179,23 +179,19 @@ K3 在 MoE expert 中使用了名为 **SiTU** 的自定义激活函数，替代�
 <strong>诚实声明</strong>：在 SiTU 的详细设计公开之前，我们无法严格论证它与 TPU MXU 的对齐关系。有界激活<em>可能</em>有利于低精度计算和量化，但这属于合理推测，不是确定结论。本文将此列为"待验证"项，待 K3 完整技术报告发布后再更新分析。
 </div>
 
-### 第五重：Per-Head Muon → 完美 batch matmul
+### 第五重：Per-Head Muon → 通用优化（非 TPU 专属）
 
-K3 的 Per-Head Muon 将 Newton-Schulz 正交化按 attention head 粒度执行——128 个 (7168 × 128) 的独立正交化。
-
-这在 TPU 上是**完美的 batch matmul 形式**：
+K3 的 Per-Head Muon 将 Newton-Schulz 正交化按 attention head 粒度执行——128 个 (7168 × 128) 的独立正交化，核心运算 X^T @ X 从 (16384, 16384) 降为 128 个 (128, 128)，计算量降低 128×。
 
 ```python
-# Per-Head Muon 的 NS 迭代
-# 128 个 head，每个 (7168, 128)
-# NS 核心运算: X @ X^T @ X
-
-# TPU 实现：直接用 batch matmul
-# vmap 或 reshape 成 (128, 7168, 128) 的 batch 维度
-# MXU 原生支持 batch matmul，利用率极高
+# 全矩阵 Muon: X^T @ X → (16384, 16384) 中间矩阵，512 MB (BF16)
+# Per-Head Muon: 128 × X^T @ X → (128, 128) 中间矩阵，32 KB (BF16)
+# 计算量: O(7168 × 16384²) → O(128 × 7168 × 128²) = 128× 降低
 ```
 
-对比全矩阵 Muon 的 (7168 × 16384) 正交化——这个尺寸在 TPU 上需要分片处理，效率远不如 per-head 版本。
+<div class="callout-lede">
+<strong>诚实说明</strong>：Per-Head Muon 的 128× 计算降低是<strong>通用优化</strong>，在 GPU 和 TPU 上同样有效。batch matmul 在 CUDA 的 batched CUBLAS 和 TPU 的 MXU 上都能高效执行。我们不宜将此标为"TPU 专属契合"。它是 K3 的一个好设计——降低了优化器开销、简化了实现——但不属于本文讨论的"TPU 特殊收益"范畴。
+</div>
 
 ### 第六重：AttnRes → 无条件分支，XLA 友好
 
@@ -231,7 +227,7 @@ K3 团队（Moonshot AI）主要在 NVIDIA GPU 上训练。他们的创新动机
 |------|---------------|-------------------|
 | Quantile Balancing | 消除辅助 loss，简化训练 | **消灭 capacity_factor + Megablox ragged 开销，解锁 XLA 全图编译** |
 | SiTU | 2.8T 规模训练稳定性 | **细节未披露，TPU 对齐待定** |
-| Per-Head Muon | 128× 降低优化器计算成本 | **完美 batch matmul，MXU 利用率极高** |
+| Per-Head Muon | 128× 降低优化器计算成本 | 通用优化，GPU/TPU 同样受益 |
 | Static-Shape EP | GPU 上也有通信优化收益 | **XLA 静态形状的核心要求，解锁 SparseCore Collective Offloading 编译时 DMA 规划** |
 | AttnRes | 更好的梯度流 + 模型质量 | **纯矩阵运算，无条件分支，XLA 编译友好** |
 | KDA 3:1 | 长序列推理效率 | **KV cache 15GB 仅占单 chip 192GiB HBM 的 8%，零跨 chip 通信** |

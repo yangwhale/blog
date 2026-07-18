@@ -50,9 +50,9 @@
   <text x="120" y="305" text-anchor="middle" font-size="11" font-weight="600" fill="#E37400">Per-Head Muon</text>
   <text x="350" y="299" text-anchor="middle" font-size="10" fill="#3C4043">128x 降低优化器成本</text>
   <text x="350" y="313" text-anchor="middle" font-size="10" fill="#3C4043">per-head 效果更好</text>
-  <text x="600" y="299" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">完美 batch matmul</text>
-  <text x="600" y="313" text-anchor="middle" font-size="10" font-weight="600" fill="#137333">MXU 利用率极高</text>
-  <text x="810" y="305" text-anchor="middle" font-size="18">✅</text>
+  <text x="600" y="299" text-anchor="middle" font-size="10" fill="#9AA0A6">通用优化</text>
+  <text x="600" y="313" text-anchor="middle" font-size="10" fill="#9AA0A6">GPU/TPU 同样受益</text>
+  <text x="810" y="305" text-anchor="middle" font-size="18">➖</text>
 
   <!-- Row 5: AttnRes -->
   <rect x="30" y="332" width="840" height="52" rx="4" fill="#E6F4EA" opacity="0.5"/>
