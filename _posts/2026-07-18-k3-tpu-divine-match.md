@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "猜想：Kimi K3 是 TPU 的天赐良缘"
-date: 2026-07-18 13:30:00 +0800
+date: 2026-07-18 05:00:00 +0000
 categories: [tpu, moe, architecture]
 lang: zh
 ---
