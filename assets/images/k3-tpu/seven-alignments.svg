@@ -61,7 +61,7 @@
   <text x="825" y="308" text-anchor="middle" font-size="9" fill="#5F6368">相当</text>
 
   <!-- Row 5: Stable LatentMoE -->
-  <rect x="30" y="326" width="840" height="54" rx="4" fill="#FEF7E0" opacity="0.6"/>
+  <rect x="30" y="326" width="840" height="54" rx="4" fill="#FFFFFF" opacity="0.6"/>
   <rect x="38" y="334" width="164" height="38" rx="6" fill="#F9AB00" opacity="0.15" stroke="#F9AB00" stroke-width="1"/>
   <text x="120" y="351" text-anchor="middle" font-size="10.5" font-weight="600" fill="#E37400">Stable LatentMoE</text>
   <text x="120" y="365" text-anchor="middle" font-size="9" fill="#B06000">7168 → 3584</text>
@@ -106,7 +106,7 @@
   <text x="404" y="523" font-size="9.5" fill="#3C4043">正交化算术是 batch matmul，jax.vmap 直出</text>
   <text x="404" y="537" font-size="9.5" fill="#C5221F">但真瓶颈是 P2P 参数聚集，XLA 无对应原语</text>
   <text x="825" y="523" text-anchor="middle" font-size="16">➖</text>
-  <text x="825" y="540" text-anchor="middle" font-size="9" fill="#5F6368">半白捡</text>
+  <text x="825" y="540" text-anchor="middle" font-size="9" fill="#5F6368">相当（半白捡）</text>
 
   <!-- Row 9: Native multimodal (counterexample) -->
   <rect x="30" y="558" width="840" height="54" rx="4" fill="#FCE8E6" opacity="0.6"/>

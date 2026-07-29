@@ -14,7 +14,7 @@
 
   <!-- Title -->
   <text x="430" y="28" text-anchor="middle" font-size="15" font-weight="700" fill="#202124">TPU v7 SparseCore Collective Offloading：通信侧编译期规划</text>
-  <text x="430" y="46" text-anchor="middle" font-size="10" fill="#5F6368">每 chip 4 个 SparseCore（官方）· 访存粒度远细于 TensorCore 的 systolic array · tile 数与 SPMEM 容量官方未公布 v7 版本</text>
+  <text x="430" y="46" text-anchor="middle" font-size="10" fill="#5F6368">每 chip 4 个 SparseCore · 每 SC 16 subcore / 16 lane / 8 MiB VMEM / DMA granule 32 B（JAX tpu_info.py）</text>
 
   <!-- TPU Chip outline -->
   <rect x="40" y="58" width="780" height="345" rx="10" fill="white" stroke="#DADCE0" stroke-width="1.5"/>
@@ -64,7 +64,7 @@
 
   <!-- SparseCore tasks -->
   <rect x="550" y="145" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="163" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">① Token Dispatch</text>
+  <text x="665" y="163" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">① Token Dispatch（SC 编排 · DMA 执行）</text>
   <text x="665" y="178" text-anchor="middle" font-size="8" fill="#B06000">细粒度 DMA 按 expert 分组</text>
 
   <rect x="550" y="197" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
@@ -72,7 +72,7 @@
   <text x="665" y="230" text-anchor="middle" font-size="8" fill="#B06000">静态形状 → 编译时 DMA 规划</text>
 
   <rect x="550" y="249" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="267" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">③ Token Combine</text>
+  <text x="665" y="267" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">③ Token Combine（SC 编排 · DMA 执行）</text>
   <text x="665" y="282" text-anchor="middle" font-size="8" fill="#B06000">结果聚合回 TensorCore</text>
 
   <rect x="550" y="299" width="230" height="48" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
