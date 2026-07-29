@@ -8,8 +8,8 @@
   <!-- Left: XLA Requirement -->
   <rect x="30" y="66" width="250" height="86" rx="8" fill="#E8F0FE" stroke="#1A73E8" stroke-width="1.5"/>
   <text x="155" y="90" text-anchor="middle" font-size="13" font-weight="600" fill="#1A73E8">TPU / XLA 的要求</text>
-  <text x="155" y="112" text-anchor="middle" font-size="11" fill="#3C4043">所有 tensor 形状</text>
-  <text x="155" y="128" text-anchor="middle" font-size="11" fill="#3C4043">必须在编译时确定</text>
+  <text x="155" y="110" text-anchor="middle" font-size="11" fill="#3C4043">缓冲区上界必须编译期已知</text>
+  <text x="155" y="126" text-anchor="middle" font-size="10" fill="#5F6368">上界离实际值越远，浪费越大</text>
 
   <!-- Right: MoE Nature -->
   <rect x="620" y="66" width="250" height="86" rx="8" fill="#FEF7E0" stroke="#F9AB00" stroke-width="1.5"/>
@@ -72,12 +72,14 @@
   <text x="700" y="298" font-size="9" fill="#9AA0A6">推理时冻结 · 不保证精确相等</text>
 
   <!-- Arrow down -->
-  <text x="631" y="336" text-anchor="middle" font-size="13" fill="#5F6368">▼</text>
+  <line x1="430" y1="333" x2="832" y2="333" stroke="#DADCE0" stroke-width="1" stroke-dasharray="5,4"/>
+  <rect x="520" y="325" width="222" height="16" rx="8" fill="#FAFAFA"/>
+  <text x="631" y="337" text-anchor="middle" font-size="9" fill="#5F6368">两层各自独立成立 · QB 只降低下层的成本</text>
 
   <!-- Layer 2: MoonEP -->
   <rect x="406" y="344" width="450" height="94" rx="6" fill="#E8F0FE" opacity="0.6"/>
   <text x="418" y="362" font-size="10.5" font-weight="600" fill="#1A73E8">系统层 · MoonEP（动态冗余专家）</text>
-  <text x="856" y="362" text-anchor="end" font-size="9.5" fill="#174EA6">对任意路由都成立</text>
+  <text x="856" y="362" text-anchor="end" font-size="9.5" fill="#174EA6">不依赖上层，对任意路由都成立</text>
 
   <text x="418" y="386" font-size="9.5" fill="#5F6368">Rank 0</text>
   <rect x="472" y="376" width="60" height="13" rx="2" fill="#1A73E8" opacity="0.85"/>

@@ -14,11 +14,11 @@
 
   <!-- Title -->
   <text x="430" y="28" text-anchor="middle" font-size="15" font-weight="700" fill="#202124">TPU v7 SparseCore Collective Offloading：通信侧编译期规划</text>
-  <text x="430" y="46" text-anchor="middle" font-size="10" fill="#5F6368">4 SC/chip (2/chiplet) · 16 tiles/SC · 2.5 MB SPMEM/SC · DMA 4 / 32-byte 粒度 (vs TensorCore 512-byte)</text>
+  <text x="430" y="46" text-anchor="middle" font-size="10" fill="#5F6368">每 chip 4 个 SparseCore（官方）· 访存粒度远细于 TensorCore 的 systolic array · tile 数与 SPMEM 容量官方未公布 v7 版本</text>
 
   <!-- TPU Chip outline -->
   <rect x="40" y="58" width="780" height="345" rx="10" fill="white" stroke="#DADCE0" stroke-width="1.5"/>
-  <text x="430" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">TPU v7 Chip (Dual-Chiplet · D2D ~8 Tb/s)</text>
+  <text x="430" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#5F6368">TPU v7 Chip（Dual-Chiplet · D2D = 单条 ICI link 的 6 倍）</text>
 
   <!-- TensorCore section -->
   <rect x="60" y="92" width="450" height="295" rx="8" fill="url(#tc-grad)" stroke="#1A73E8" stroke-width="1.5"/>
@@ -26,9 +26,9 @@
   <text x="285" y="131" text-anchor="middle" font-size="10" fill="#1967D2">Expert FFN + Gating 计算</text>
 
   <!-- Gating block (small, now in TensorCore) -->
-  <rect x="80" y="145" width="130" height="45" rx="6" fill="#FBBC04" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="145" y="166" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">Expert Gating</text>
-  <text x="145" y="180" text-anchor="middle" font-size="8" fill="#B06000">小型 dense matmul</text>
+  <rect x="80" y="145" width="130" height="45" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
+  <text x="145" y="166" text-anchor="middle" font-size="10" font-weight="500" fill="#1967D2">Expert Gating</text>
+  <text x="145" y="180" text-anchor="middle" font-size="8" fill="#1967D2">小型 dense matmul</text>
 
   <!-- Expert FFN blocks -->
   <rect x="220" y="145" width="95" height="45" rx="6" fill="#1A73E8" opacity="0.15" stroke="#1A73E8" stroke-width="1"/>
@@ -52,7 +52,7 @@
 
   <!-- Utilization labels -->
   <text x="285" y="315" text-anchor="middle" font-size="12" font-weight="700" fill="#1A73E8">MXU 专注 Expert 与 Attention 计算</text>
-  <text x="285" y="332" text-anchor="middle" font-size="9" fill="#1967D2">路由与通信 offload 后，不再占用 4,611 FP8 TFLOPS</text>
+  <text x="285" y="332" text-anchor="middle" font-size="9" fill="#1967D2">路由与通信 offload 后，不再占用 4,614 FP8 TFLOPS</text>
 
   <!-- Pipeline indicator -->
   <text x="285" y="365" text-anchor="middle" font-size="10" fill="#5F6368">Collective Offloading 提速数据见 OpenXLA SparseCore 文档</text>
@@ -60,15 +60,15 @@
   <!-- SparseCore section -->
   <rect x="530" y="92" width="270" height="295" rx="8" fill="url(#sc-grad)" stroke="#F9AB00" stroke-width="1.5"/>
   <text x="665" y="115" text-anchor="middle" font-size="14" font-weight="700" fill="#E37400">SparseCore x 4</text>
-  <text x="665" y="131" text-anchor="middle" font-size="10" fill="#E37400">独立通信引擎 (SCS + 16 tiles/SC)</text>
+  <text x="665" y="131" text-anchor="middle" font-size="10" fill="#E37400">独立通信引擎（可作为独立控制线程）</text>
 
   <!-- SparseCore tasks -->
   <rect x="550" y="145" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
   <text x="665" y="163" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">① Token Dispatch</text>
-  <text x="665" y="178" text-anchor="middle" font-size="8" fill="#B06000">4 / 32-byte DMA 按 expert 分组</text>
+  <text x="665" y="178" text-anchor="middle" font-size="8" fill="#B06000">细粒度 DMA 按 expert 分组</text>
 
   <rect x="550" y="197" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>
-  <text x="665" y="215" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">② All-to-All (ICI 5,376 Gbps)</text>
+  <text x="665" y="215" text-anchor="middle" font-size="10" font-weight="500" fill="#E37400">② All-to-All（ICI 双向 1,200 GBps/chip）</text>
   <text x="665" y="230" text-anchor="middle" font-size="8" fill="#B06000">静态形状 → 编译时 DMA 规划</text>
 
   <rect x="550" y="249" width="230" height="42" rx="6" fill="#F9AB00" opacity="0.2" stroke="#F9AB00" stroke-width="1"/>

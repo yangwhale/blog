@@ -70,11 +70,11 @@ image: https://cc.higcp.com/assets/imagen/A-dramatic-wide-angle-digital-20260718
 | 芯片架构 | Dual-Chiplet | 每 chiplet = 1 TensorCore + 2 SparseCore + 96 GB HBM；D2D 为**单条 ICI link 的 6 倍** |
 | SparseCore | 4 SC/chip（2/chiplet） | 官方仅公布数量；tile 数与 SPMEM 容量见下注 |
 | 计算带宽比 | **625 FLOPS/byte** (FP8) | 计算远快于带宽，通信优化至关重要 |
-| Pod | 9,216 chips | 42.5 Exaflops FP8，1.73 PiB HBM |
+| Pod | 9,216 chips | 42.5 Exaflops FP8；HBM 合计 9,216 × 192 GiB = **1,728 TiB（1.69 PiB / 1.90 PB）** |
 
-<span class="evid evid-ext">外部资料</span> 上表全部取自 [Google Cloud TPU7x 官方规格页](https://docs.cloud.google.com/tpu/docs/tpu7x)，不属于 K3 的一手来源。
+<span class="evid evid-ext">外部资料</span> 上表除末行外全部取自 [Google Cloud TPU7x 官方规格页](https://docs.cloud.google.com/tpu/docs/tpu7x)，不属于 K3 的一手来源。（官方页没有"Pod HBM 合计"这一行，末行是按 9,216 × 192 GiB 自算的；常见的"1.77 PB"说法是把 GiB 当 GB 用的结果。）
 
-> **一处口径更正（2026-07-29）**：首发版这张表里的算力（4,611 / 2,306）、ICI 带宽（5,376 Gbps ÷ 4 links）、计算带宽比（623）和 HBM 总量（1.77 PB）都不准——算力是从「42.5 EF ÷ 9,216」反推的，ICI 那一行更是**整条错了**（官方是每 chip 双向 1,200 GBps、每轴 200 GBps，3D Torus 是三轴六向而非 4 links）。已全部换成官方值。<br>
+> **一处口径更正（2026-07-29）**：首发版这张表里的算力（4,611 / 2,306）、ICI 带宽（5,376 Gbps ÷ 4 links）、计算带宽比（623）和 HBM 总量（1.77 PB，把 GiB 当 GB 用）都不准——算力是从「42.5 EF ÷ 9,216」反推的，ICI 那一行更是**整条错了**（官方是每 chip 双向 1,200 GBps、每轴 200 GBps，3D Torus 是三轴六向而非 4 links）。已全部换成官方值。<br>
 > 另有几个数字**官方文档没有公布 v7 的版本**：SparseCore 的 16 tiles/SC、2.5 MB SPMEM、SCS 标量控制器、8-wide SIMD、4/32-byte DMA 粒度——OpenXLA 的 SparseCore 文档只给了 v4 / v5p / Trillium 三列。本文后面凡涉及这些，均按机制理解使用，不作为 v7 的确切规格。
 
 一个关键数字：**625 FLOPS/byte 的 FP8 计算带宽比**（4,614 TFLOPS ÷ 7,380 GBps）。TPU v7 的计算速度远远快于数据搬运速度——任何通信开销都会直接转化为算力浪费。这是理解后续讨论的基础。
@@ -94,10 +94,10 @@ TPU 的灵魂是 XLA 编译器。XLA 的核心约束常被概括成"所有 tenso
 Google 自己的 GShard 论文就是为了解决这个矛盾而生的。方案：`capacity_factor`——给每个 expert 预留固定容量（如 1.5× 平均值），不足补零，超出丢弃。
 
 ```
-expert_capacity = (total_tokens / num_experts) × capacity_factor
+expert_capacity = (total_tokens × top_k / num_experts) × capacity_factor
 # capacity_factor = 1.5 → 预留 50% 余量
 #
-# 冷门 expert：30% 的 slot 是零向量 → 无用计算
+# 冷门 expert：三分之一以上的 slot 是零向量 → 无用计算
 # 热门 expert：超出容量的 token 被丢弃 → 信息丢失
 # XLA 满意了（形状静态），但代价是 ~33% 的算力浪费
 ```
@@ -107,7 +107,7 @@ expert_capacity = (total_tokens / num_experts) × capacity_factor
 后来 Google 内部发展了 **Megablox Grouped MatMul**——一个 Pallas kernel 实现，将 MoE 的多个 expert matmul 重构为单个 grouped matmul，用 CSR 式的 tile 元数据（`group_offsets` / `group_ids` / `m_tile_ids`）跳过空 tile，从而避免 padding 浪费。<span class="evid evid-ext">外部资料</span>（顺带更正首发版一处错误归因：读 `gmm.py` 可以看到它是**纯 TensorCore 的 Pallas kernel**，并不使用 SparseCore。）Megablox 本质上是在"形状运行时才定"的前提下做优化——需要维护这套元数据。
 
 <figure style="margin: 24px 0; text-align: center;">
-<img src="/assets/images/k3-tpu/moe-tpu-conflict.svg" alt="MoE 在 TPU 上的历史矛盾与 K3 的两层解法" style="width: 100%; max-width: 860px;" />
+<img src="/assets/images/k3-tpu/moe-tpu-conflict.svg" alt="对比图：GShard 用 padding 与 drop 换静态形状；K3 分两层——算法层 QB 让专家负载趋近均衡，系统层 MoonEP 让每个 rank 恰好收到 S×K 个 token，但 rank 内逐专家仍不均" style="width: 100%; max-width: 860px;" />
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">K3 把矛盾拆成两层——rank 级通信形状完全静态化，expert 级计算仍需 grouped matmul</figcaption>
 </figure>
 
@@ -162,7 +162,7 @@ K3 与 DeepSeek-V3 属于同一族：sigmoid router score + 每专家偏置 + `a
 <ul>
 <li><strong>因果性</strong>：<em>"For causality, the update takes effect only in the next step, i.e., a batch is never routed with a bias derived from itself."</em></li>
 <li><strong>无并列假设</strong>：<em>"Assuming no ties, setting this count to q makes ... exactly q margins stay above the threshold."</em></li>
-<li><strong>分位数本身是估计</strong>：<em>"Gathering O(mn) margins for an exact quantile is impractical inside the training loop."</em> 实际用直方图，<em>"the error is bounded by the bin width"</em>。</li>
+<li><strong>分位数本身是估计</strong>：<em>"Gathering O(mn) margins for an exact quantile is impractical inside the training loop."</em> 实际用直方图，<em>"the error is bounded by the bin width"</em>。（公平起见，报告紧接着说 <em>"with B = 1000 this is at most a few 10⁻³, and we observe no measurable residual load imbalance"</em>——误差在实践中很小；这里要说的是"不精确相等"这个性质，不是"误差大"。）</li>
 <li><strong>推理时冻结</strong>：<em>"at deployment, routing is a fixed Top-k selection with a frozen bias, and no quantile computation is needed."</em></li>
 </ul>
 准确的说法是：<strong>QB 让专家负载显著趋近均匀，但不保证逐专家精确相等。</strong>
@@ -218,7 +218,7 @@ K3 在 GPU 侧的对应做法是 group GEMM + 负载感知调度；TPU 侧的对
 ## K3 的七项创新 + 一项 TPU 承接机制：逐一审视
 
 <figure style="margin: 24px 0; text-align: center;">
-<img src="/assets/images/k3-tpu/seven-alignments.svg" alt="K3 的多重 TPU 契合" style="width: 100%; max-width: 860px;" />
+<img src="/assets/images/k3-tpu/seven-alignments.svg" alt="盘点表：K3 的 8 项收益条目与 1 项反例，逐项标注 TPU 上的边际收益判定——1 项独有放大、1 项需自建等价物、其余相当、1 项反例" style="width: 100%; max-width: 860px;" />
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">八项收益条目 + 一项反例，判定见下文各节</figcaption>
 </figure>
 
@@ -262,7 +262,7 @@ XLA 可以将 MoE forward pass 的**通信部分**——dispatch 与 combine—�
 <span class="evid evid-hard">报告实锤</span> MoonEP 还顺带解释了通信缓冲区为什么能固定：最坏不均衡下 DeepEP 的零拷贝路径需要 `S × K × R` 的缓冲区，MoonEP **只需要固定的 `S × K`**。这个"固定 buffer"才是下一节 SparseCore 编译期 DMA 规划真正依赖的前提。
 
 <figure style="margin: 24px 0; text-align: center;">
-<img src="/assets/images/k3-tpu/static-vs-dynamic.svg" alt="动态 vs 静态 All-to-All" style="width: 100%; max-width: 860px;" />
+<img src="/assets/images/k3-tpu/static-vs-dynamic.svg" alt="时间轴对比：传统 MoE 需要 Host 统计每层 token 数造成同步阻塞；rank 级完美均衡后通信形状编译期已知，dispatch 与 combine 可编译进 HLO 图并与计算重叠" style="width: 100%; max-width: 860px;" />
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">静态化的是 MoE 的通信部分（dispatch / combine），不是整个 forward pass</figcaption>
 </figure>
 
@@ -272,7 +272,7 @@ XLA 可以将 MoE forward pass 的**通信部分**——dispatch 与 combine—�
 
 SparseCore 是 TPU 的硬件特性，不是 K3 的创新——它是**承接** K3 静态形状的那一侧。本节保留讨论，但不计入 K3 的创新盘点。
 
-<span class="evid evid-ext">外部资料</span> TPU v7 每 chip 有 4 个 SparseCore，每个 SC 包含 16 个 tile 和 2.5 MB SPMEM，拥有独立的标量控制器（SCS）和 8-wide SIMD 向量单元（SCT），可作为**独立控制线程**管理 ICI fabric 上的数据移动。SparseCore 支持 4-byte 和 32-byte 粒度的 DMA，而 TensorCore 的 systolic array 优化为 512-byte 粒度——这种细粒度访问天然适合 MoE 的 token routing。
+<span class="evid evid-ext">外部资料</span> TPU v7 每 chip 有 4 个 SparseCore（官方确认），可作为**独立控制线程**管理 ICI fabric 上的数据移动。至于每 SC 的 tile 数、SPMEM 容量、标量控制器与向量单元宽度、以及 DMA 粒度——**OpenXLA 的 SparseCore 文档只覆盖 v4 / v5p / Trillium，没有 v7 的对应数据，SPMEM 容量更是任何版本都没公布**（见上文规格表下的说明）。下面的讨论只依赖一个已确认的机制性质：**SparseCore 的访存粒度远细于 TensorCore 的 systolic array，天然适合 MoE 的 token routing**。
 
 | 操作 | 执行单元 |
 |------|---------|
@@ -287,7 +287,7 @@ SparseCore 是 TPU 的硬件特性，不是 K3 的创新——它是**承接** K
 所以准确的说法是"**通信侧编译期规划，计算侧仍需 ragged 元数据——但后者的最坏情况已大幅收窄**"。
 
 <figure style="margin: 24px 0; text-align: center;">
-<img src="/assets/images/k3-tpu/sparsecore-offload.svg" alt="TPU v7 SparseCore Offload" style="width: 100%; max-width: 860px;" />
+<img src="/assets/images/k3-tpu/sparsecore-offload.svg" alt="架构图：TensorCore 负责 gating 与 Expert FFN，SparseCore 并行承担 token dispatch、All-to-All、combine、梯度同步与 QB 直方图 scatter_add" style="width: 100%; max-width: 860px;" />
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">通信侧可编译期规划 DMA，计算侧仍需 ragged 元数据</figcaption>
 </figure>
 
@@ -309,11 +309,13 @@ K3 取 β₁ = 4（gate 分支）、β₂ = 25（up 分支）。`config.json` �
 <strong>⚠️ 首发版更正</strong>：原文猜测"有界激活<em>可能</em>有利于低精度计算和量化"——<strong>方向猜对了</strong>，但写的数值区间「约 [-0.2, 1]」是错的，<strong>真实界是 |f(x)| ≤ 100</strong>。
 </div>
 
-<span class="evid evid-hard">报告实锤</span> "有界激活服务低精度"这条链的证据在 §4.1.4，而不在 `config.json`：
+<span class="evid evid-hard">报告实锤</span> <span class="evid evid-guess">推断</span> 关于"有界激活服务低精度"，报告在 §4.1.4 给了一条相关事实——但**要注意这是跨节拼接**：
 
 > *we quantize the MoE expert weights ... to MXFP4, **with activations computed in MXFP8**, while all non-expert components ... remain in higher precision. We perform quantization-aware training (QAT) throughout the entire post-training stage, covering both SFT and RL ... During RL, rollout and training share the same quantization scheme — eliminating the train–inference mismatch.*
 
-**激活跑在 MXFP8 上**——这才是 SiTU 有界性直接服务的对象。`config.json` 里的 `mxfp4-pack-quantized` 是**权重侧**的打包格式（`input_activations: null`），不能用来佐证激活有界性。
+**部署阶段激活跑在 MXFP8 上。**但必须说清分寸：§4.1.4 讲的是 **Deployment-Aware Post-Training**（SFT + RL 阶段的 QAT），而 SiTU-GLU 提出在 §2.3.2，动机原文只说泛指的 "low-precision arithmetic"；§5.2.2 还提到预训练期大部分激活用的是 **block-wise FP8**，不是 MXFP8。**报告本身从未把 SiTU 与 MXFP8 直接连起来——这条因果链是我的推断，不是报告的结论。**
+
+顺带更正：`config.json` 里的 `mxfp4-pack-quantized` 是**权重侧**的打包格式（`input_activations: null`），不能用来佐证激活有界性。
 
 <div class="callout-warn">
 <strong>⚠️ 改版新增的削弱证据：MX 格式在 TPU 上没有原生 dtype。</strong><span class="evid evid-ext">外部资料</span> <span class="evid evid-guess">推断</span> MXFP4 / MXFP8 是每 32 个元素共享一个 E8M0 指数的微缩放格式，是 Blackwell 的原生能力。TPU v7 官方明确支持的是 FP8。<br><br>
@@ -441,7 +443,7 @@ K3 的解法是把哈希粒度（512 token）与物理块粒度解耦、只在�
 <span class="evid evid-guess">推断</span> TPU 没有 SM 这一层可调度的并行；这条要么映射成额外的 sharding 轴（触发跨芯片通信，收益被吃掉），要么靠 Pallas grid——而 grid 步在 TPU 上是串行的。这可能也是下文实测里 HBM 带宽利用率只有 26–28% 的原因之一。
 
 <figure style="margin: 24px 0; text-align: center;">
-<img src="/assets/images/k3-tpu/kv-cache-revolution.svg" alt="KV Cache 压缩" style="width: 100%; max-width: 860px;" />
+<img src="/assets/images/k3-tpu/kv-cache-revolution.svg" alt="KV cache 对比：93 层全 MHA 在 256K 上下文下约 1,198 GB；K3 实际为 69 层 KDA 固定状态 0.22 GB 加 24 层 MLA 潜向量 6.4 GB，合计约 6.7 GB，压缩约 180 倍" style="width: 100%; max-width: 860px;" />
 <figcaption style="color: #5F6368; font-size: 13px; margin-top: 6px;">KDA 3:1 + Gated MLA 大幅压缩 KV cache。图中绝对数值为本文估算，非官方数据</figcaption>
 </figure>
 
@@ -546,17 +548,19 @@ K3 是第一个在 GPU 上训练、却在文本 backbone 上主动把这些动�
 QB 的真实算法骨架：
 
 ```python
+# 输入：b = 上一步算出的 bias，形状 (n_experts,)；K3 取 k=16, n_experts=896
 # QB 产出的是"下一步用的 bias"，不是 assignment；router 是 sigmoid 不是 softmax
 s = jax.nn.sigmoid(x @ W_r)                    # (m, n_experts)
 
 # Top-(k+1)：前 k 个是实际路由，第 k+1 个是该 token 的准入线
-topk1 = jax.lax.top_k(s + b, k + 1).values
-alpha = topk1[:, k:k+1]                        # (m, 1)
+# 注意 jax.lax.top_k 返回 (values, indices) 元组，没有 .values 属性
+topk1, _ = jax.lax.top_k(s + b, k + 1)         # (m, k+1)，降序
+alpha = topk1[:, k:k+1]                        # (m, 1) 第 k+1 大 = 准入线
 
 # 直方图统计 required bias r = alpha - s，取 k/n 分位数（负号翻转了顺序）
 #   B = 1000 个 bin，区间 [b_min - 1, b_max + 1]，每步重算
 #   每 rank 本地 scatter_add，step 末一次整数 all-reduce
-b_next = histogram_quantile(alpha - s, q=k / n_experts, axis=0, bins=1000)
+b_next = _histogram_quantile(alpha - s, q=k / n_experts, axis=0, bins=1000)  # 伪函数，需自行实现
 b_next = b_next - b_next.mean()                # 减均值不改变 Top-k 结果
 
 # 因果性：b_next 只作用于下一个 step，绝不用于产生它自己的那一批
@@ -570,14 +574,28 @@ b_next = b_next - b_next.mean()                # 减均值不改变 Top-k 结果
 
 **实测（TPU v7，cp_size=4）**：
 
+**(a) CP 加速（cp_size=4 这一组）**
+
 | 指标 | 数值 |
 |------|------|
 | 端到端 | 3.515 ms → 2.288 ms |
 | 加速比 | **1.54×**（理想 4×，效率 38.4%） |
-| CP all-gather | 45.4 µs / 10.0 MB / 带宽利用率 6% |
-| 两个主 kernel HBM 带宽利用率 | 25.8% 与 28.0% |
+| CP all-gather | 45.4 µs / 10.0 MB |
+| 该组两个主 kernel 的 HBM 带宽利用率 | 16.9% 与 18.9% |
 
-<span class="evid evid-guess">推断</span> **瓶颈定位（这是诊断，不是测量）**：all-gather 只占 45 µs 且带宽利用率仅 6%，说明它是小消息、延迟受限，不是通信瓶颈。真正压住加速比的应该是 rank 本地那段**必须有序**的仿射摘要扫描——典型的 Amdahl 现象。两个主 kernel 的 HBM 带宽利用率 26–28%，距 roofline 有 3.5–4× 的名义空间（实践天花板通常 60–80%，实际可挖约 2–3×）。
+**(b) 非 CP 单 rank（B=1, T=8192 变长打包）—— 这是另一组负载**
+
+| 指标 | 数值 |
+|------|------|
+| 两个主 kernel 运行时间 | 932.3 µs / 709.7 µs |
+| HBM 带宽利用率 | **25.8% 与 28.0%** |
+
+<div class="callout-warn">
+<strong>⚠️ 这两组数不能混着读——我第一版就混了。</strong>(a) 和 (b) 是<strong>不同负载</strong>：一组开了 CP、一组没开，序列长度与 batch 也不同。所以不能用 (b) 的 25.8%/28.0% 去论证 (a) 的 CP 效率为什么只有 38.4%。<br>
+另外 PR 的 roofline 是按 <strong>per-device</strong> 带宽 3.69 TB/s 算的，而本文规格表给的 7,380 GBps 是 <strong>per-chip</strong>——v7 一个 chip 暴露为两个 device，两者差 2×。照 chip 口径复算会对不上。
+</div>
+
+<span class="evid evid-guess">推断</span> **瓶颈定位（这是诊断，不是测量）**：CP 的 all-gather 只占 45 µs、传 10 MB，是小消息、延迟受限，不太可能是 1.54× 的主因。真正压住加速比的应该是 rank 本地那段**必须有序**的仿射摘要扫描——典型的 Amdahl 现象。而 (b) 组 26–28% 的带宽利用率说明的是另一件事：**即便不开 CP，kernel 本身也还远没吃满带宽**，名义上还有 3.5–4× 空间（实践天花板通常 60–80%，实际可挖约 2–3×）。
 
 > **溯源声明**：以上数字全部转引自 PR #1103 的描述，本文未复现，也未记录该 PR 自己那份清单要求的 JAX/libtpu 版本、逻辑与物理长度、是否含编译开销等字段。PR 作者另标注这些是 pre-refactor 历史基线，不代表当前 head。该 PR 还附了一份"重新 benchmark 必须记录什么"的清单（源 commit、JAX/libtpu 版本、逻辑/物理长度、是否含编译开销、报告 CP 加速必须用配对负载），这个严谨度值得学。
 
