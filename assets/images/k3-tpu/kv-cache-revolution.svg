@@ -1,58 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 340" font-family="Google Sans, Segoe UI, sans-serif">
-  <rect width="860" height="340" fill="#FAFAFA" rx="8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Google Sans, Segoe UI, sans-serif">
+  <rect width="900" height="420" fill="#FAFAFA" rx="8"/>
 
-  <!-- Title -->
-  <text x="430" y="28" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">KV Cache 革命：从 280GB 到 15GB</text>
-  <text x="430" y="46" text-anchor="middle" font-size="11" fill="#5F6368">K3 的 KDA 3:1 + Gated MLA 让 TPU 单 chip 承载 256K 上下文</text>
+  <text x="450" y="28" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">KV Cache：~1.2 TB → ~6.7 GB（256K 上下文，BF16）</text>
+  <text x="450" y="47" text-anchor="middle" font-size="10.5" fill="#5F6368">本文按 config.json 的层数 / 头数 / kv_lora_rank 计算（参数量取自技术报告 Table 1），非官方数据</text>
 
-  <!-- LEFT: Traditional MHA -->
-  <rect x="30" y="62" width="260" height="255" rx="8" fill="#FFF" stroke="#EA4335" stroke-width="1.5"/>
-  <rect x="30" y="62" width="260" height="28" rx="8" fill="#FCE8E6"/>
-  <text x="160" y="81" text-anchor="middle" font-size="12" font-weight="600" fill="#C5221F">传统 MHA (如 Llama-405B)</text>
+  <!-- LEFT: counterfactual full MHA -->
+  <rect x="30" y="66" width="376" height="286" rx="8" fill="#FFF" stroke="#EA4335" stroke-width="1.5"/>
+  <rect x="30" y="66" width="376" height="30" rx="8" fill="#FCE8E6"/>
+  <rect x="30" y="88" width="376" height="8" fill="#FCE8E6"/>
+  <text x="218" y="86" text-anchor="middle" font-size="12" font-weight="600" fill="#C5221F">反事实基线：同规格的全 MHA</text>
+  <text x="218" y="114" text-anchor="middle" font-size="10" fill="#5F6368">假设 K3 的 93 层全部用标准 MHA</text>
 
-  <!-- MHA HBM bars -->
-  <text x="50" y="115" font-size="10" fill="#5F6368">Layer 1-126</text>
-  <rect x="50" y="120" width="220" height="100" rx="4" fill="#EA4335" opacity="0.15" stroke="#EA4335" stroke-width="0.5"/>
-  <text x="160" y="155" text-anchor="middle" font-size="9" fill="#C5221F">每层 K cache: num_heads × d_head × seq_len</text>
-  <text x="160" y="170" text-anchor="middle" font-size="9" fill="#C5221F">每层 V cache: num_heads × d_head × seq_len</text>
-  <text x="160" y="185" text-anchor="middle" font-size="9" fill="#C5221F">128 heads × 128 dim × 256K</text>
-  <text x="160" y="205" text-anchor="middle" font-size="9" fill="#EA4335">= 每层 8.6GB (BF16)</text>
+  <rect x="52" y="128" width="332" height="126" rx="6" fill="#EA4335" opacity="0.08" stroke="#EA4335" stroke-width="0.5"/>
+  <text x="68" y="150" font-size="10" fill="#3C4043">层数 × 头数 × 头维</text>
+  <text x="368" y="150" text-anchor="end" font-size="10" font-weight="600" fill="#C5221F">93 × 96 × 128</text>
+  <line x1="68" y1="158" x2="368" y2="158" stroke="#F1F3F4" stroke-width="1"/>
+  <text x="68" y="178" font-size="10" fill="#3C4043">每 token 每层（K + V）</text>
+  <text x="368" y="178" text-anchor="end" font-size="10" font-weight="600" fill="#C5221F">2 × 96 × 128 × 2 B = 48 KiB</text>
+  <line x1="68" y1="186" x2="368" y2="186" stroke="#F1F3F4" stroke-width="1"/>
+  <text x="68" y="206" font-size="10" fill="#3C4043">× 256K token</text>
+  <text x="368" y="206" text-anchor="end" font-size="10" font-weight="600" fill="#C5221F">≈ 12.9 GB / 层</text>
+  <line x1="68" y1="214" x2="368" y2="214" stroke="#F1F3F4" stroke-width="1"/>
+  <text x="68" y="234" font-size="10" fill="#3C4043">× 93 层</text>
+  <text x="368" y="234" text-anchor="end" font-size="11" font-weight="700" fill="#EA4335">≈ 1,198 GB</text>
 
-  <!-- MHA total -->
-  <rect x="50" y="232" width="220" height="38" rx="6" fill="#FCE8E6"/>
-  <text x="160" y="248" text-anchor="middle" font-size="11" fill="#C5221F">总 KV cache:</text>
-  <text x="160" y="264" text-anchor="middle" font-size="16" font-weight="700" fill="#EA4335">~280 GB</text>
+  <rect x="52" y="268" width="332" height="34" rx="6" fill="#FCE8E6"/>
+  <text x="218" y="290" text-anchor="middle" font-size="13" font-weight="700" fill="#EA4335">~1.2 TB</text>
 
-  <!-- verdict -->
-  <text x="160" y="300" text-anchor="middle" font-size="10" fill="#EA4335">❌ 需 3+ TPU chips 放 KV cache</text>
+  <text x="218" y="326" text-anchor="middle" font-size="10" fill="#EA4335">单 chip 192 GiB 放不下 — 仅 KV 就需约 6 颗</text>
+  <text x="218" y="342" text-anchor="middle" font-size="9.5" fill="#9AA0A6">TPU 上要走 paged KV：Pallas kernel + page table 索引</text>
 
-  <!-- MIDDLE: Arrow -->
-  <text x="330" y="185" text-anchor="middle" font-size="28" fill="#34A853">→</text>
+  <!-- Arrow -->
+  <text x="437" y="216" text-anchor="middle" font-size="26" fill="#34A853">→</text>
 
-  <!-- RIGHT: K3 KDA+MLA -->
-  <rect x="370" y="62" width="460" height="255" rx="8" fill="#FFF" stroke="#34A853" stroke-width="1.5"/>
-  <rect x="370" y="62" width="460" height="28" rx="8" fill="#E6F4EA"/>
-  <text x="600" y="81" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">K3: KDA 3:1 + Gated MLA (2B-A16B)</text>
+  <!-- RIGHT: K3 actual -->
+  <rect x="468" y="66" width="402" height="286" rx="8" fill="#FFF" stroke="#34A853" stroke-width="1.5"/>
+  <rect x="468" y="66" width="402" height="30" rx="8" fill="#E6F4EA"/>
+  <rect x="468" y="88" width="402" height="8" fill="#E6F4EA"/>
+  <text x="669" y="86" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">K3 实际：KDA 3:1 + Gated MLA</text>
+  <text x="669" y="114" text-anchor="middle" font-size="10" fill="#5F6368">2.78T 总参 / 104.2B 激活 · 93 层 = 69 KDA + 24 MLA</text>
 
-  <!-- KDA layers -->
-  <text x="390" y="110" font-size="10" fill="#1A73E8" font-weight="600">KDA × 3 层 (每 4 层中 3 层)</text>
-  <rect x="390" y="115" width="200" height="45" rx="4" fill="#1A73E8" opacity="0.1" stroke="#1A73E8" stroke-width="0.5"/>
-  <text x="490" y="133" text-anchor="middle" font-size="9" fill="#1967D2">线性注意力 → 恒定 KV 状态</text>
-  <text x="490" y="148" text-anchor="middle" font-size="9" fill="#1967D2">大小与 seq_len 无关</text>
-  <text x="600" y="140" font-size="12" fill="#34A853" font-weight="700">≈ 0 GB</text>
+  <!-- KDA block -->
+  <rect x="488" y="128" width="362" height="58" rx="6" fill="#1A73E8" opacity="0.09" stroke="#1A73E8" stroke-width="0.5"/>
+  <text x="502" y="147" font-size="10.5" font-weight="600" fill="#1967D2">KDA × 69 层</text>
+  <text x="836" y="147" text-anchor="end" font-size="11" font-weight="700" fill="#1A73E8">≈ 0.22 GB</text>
+  <text x="502" y="164" font-size="9" fill="#5F6368">固定递归状态 96 head × 128 × 128 = 3.1 MB / 层</text>
+  <text x="502" y="178" font-size="9" font-weight="600" fill="#1967D2">与序列长度完全无关 — 编译时常量</text>
 
-  <!-- MLA layers -->
-  <text x="390" y="180" font-size="10" fill="#9334E6" font-weight="600">Gated MLA × 1 层 (每 4 层中 1 层)</text>
-  <rect x="390" y="185" width="200" height="45" rx="4" fill="#9334E6" opacity="0.1" stroke="#9334E6" stroke-width="0.5"/>
-  <text x="490" y="203" text-anchor="middle" font-size="9" fill="#7627BB">低秩 KV：latent_dim = 512</text>
-  <text x="490" y="218" text-anchor="middle" font-size="9" fill="#7627BB">1 rope head + latent 共享</text>
-  <text x="600" y="210" font-size="12" fill="#34A853" font-weight="700">~15 GB</text>
+  <!-- MLA block -->
+  <rect x="488" y="194" width="362" height="58" rx="6" fill="#9334E6" opacity="0.09" stroke="#9334E6" stroke-width="0.5"/>
+  <text x="502" y="213" font-size="10.5" font-weight="600" fill="#7627BB">Gated MLA × 24 层</text>
+  <text x="836" y="213" text-anchor="end" font-size="11" font-weight="700" fill="#9334E6">≈ 6.4 GB</text>
+  <text x="502" y="230" font-size="9" fill="#5F6368">NoPE，只缓存 kv_lora_rank = 512 维潜向量</text>
+  <text x="502" y="244" font-size="9" fill="#7627BB">512 × 2 B × 256K = 268 MB / 层</text>
 
-  <!-- K3 total -->
-  <rect x="390" y="240" width="420" height="38" rx="6" fill="#E6F4EA"/>
-  <text x="600" y="256" text-anchor="middle" font-size="11" fill="#137333">总 KV cache:</text>
-  <text x="600" y="272" text-anchor="middle" font-size="16" font-weight="700" fill="#34A853">~15 GB (↓ 94.6%)</text>
+  <!-- Total -->
+  <rect x="488" y="262" width="362" height="40" rx="6" fill="#E6F4EA"/>
+  <text x="560" y="287" text-anchor="middle" font-size="11" fill="#137333">合计</text>
+  <text x="700" y="288" text-anchor="middle" font-size="15" font-weight="700" fill="#34A853">~6.7 GB</text>
+  <text x="812" y="287" text-anchor="middle" font-size="11" font-weight="600" fill="#137333">↓ 约 180×</text>
 
-  <!-- verdict -->
-  <text x="600" y="303" text-anchor="middle" font-size="10" fill="#137333">✅ 单 TPU chip 192GB HBM → KV cache 只用 8%</text>
+  <text x="669" y="326" text-anchor="middle" font-size="10" fill="#137333">单 TPU chip 192 GiB — KV 只占 3.2%</text>
+  <text x="669" y="342" text-anchor="middle" font-size="9.5" fill="#9AA0A6">KDA 常数 state 连 page pool 与索引管理都不需要</text>
+
+  <!-- Caveat -->
+  <text x="450" y="382" text-anchor="middle" font-size="9.5" fill="#5F6368">口径说明：均按 BF16 计。KDA 状态精度报告未披露，若用 FP32 则约 0.44 GB。</text>
+  <text x="450" y="398" text-anchor="middle" font-size="9.5" fill="#5F6368">此处不含前缀缓存持久化的 KDA checkpoint —— 报告明确指出「Checkpoints are large」。</text>
 </svg>

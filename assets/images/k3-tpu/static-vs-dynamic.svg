@@ -43,12 +43,12 @@
   <!-- RIGHT: Static (K3) -->
   <rect x="470" y="50" width="400" height="330" rx="8" fill="#FFF" stroke="#34A853" stroke-width="1.5" opacity="0.8"/>
   <rect x="470" y="50" width="400" height="30" rx="8" fill="#E6F4EA"/>
-  <text x="670" y="70" text-anchor="middle" font-size="13" font-weight="600" fill="#137333">K3：静态 All-to-All</text>
+  <text x="670" y="70" text-anchor="middle" font-size="13" font-weight="600" fill="#137333">K3 + MoonEP：静态 All-to-All</text>
 
   <!-- Timeline bars - Static (overlapped) -->
   <text x="490" y="108" font-size="10" fill="#5F6368">编译时</text>
   <rect x="570" y="95" width="280" height="22" rx="4" fill="#34A853" opacity="0.15" stroke="#34A853" stroke-width="0.5"/>
-  <text x="710" y="110" text-anchor="middle" font-size="9" fill="#137333">XLA 一次性编译整个 MoE forward</text>
+  <text x="710" y="110" text-anchor="middle" font-size="9" fill="#137333">XLA 编译 MoE 通信路径（dispatch / combine）</text>
 
   <text x="490" y="148" font-size="10" fill="#5F6368">运行时</text>
 
@@ -64,15 +64,16 @@
 
   <!-- Overlap bracket -->
   <line x1="620" y1="210" x2="690" y2="210" stroke="#34A853" stroke-width="2"/>
-  <text x="655" y="224" text-anchor="middle" font-size="9" font-weight="600" fill="#34A853">通信被计算掩盖</text>
+  <text x="655" y="224" text-anchor="middle" font-size="9" font-weight="600" fill="#34A853">通信可被计算掩盖</text>
 
   <!-- Static summary -->
   <rect x="490" y="255" width="360" height="55" rx="6" fill="#E6F4EA" opacity="0.5"/>
   <text x="670" y="275" text-anchor="middle" font-size="10" fill="#137333">✅ 编译时已知所有通信形状</text>
-  <text x="670" y="291" text-anchor="middle" font-size="10" fill="#137333">✅ 零 Host-Device 同步</text>
-  <text x="670" y="307" text-anchor="middle" font-size="10" fill="#137333">✅ 计算通信完美 overlap</text>
+  <text x="670" y="291" text-anchor="middle" font-size="10" fill="#137333">✅ 消除 per-layer MoE Host 同步</text>
+  <text x="670" y="307" text-anchor="middle" font-size="10" fill="#137333">✅ overlap 策略可编译期规划</text>
 
   <!-- Compiled? -->
   <rect x="490" y="325" width="360" height="30" rx="6" fill="#E6F4EA"/>
-  <text x="670" y="345" text-anchor="middle" font-size="11" font-weight="600" fill="#137333">XLA 编译整个 MoE forward pass ✨</text>
+  <text x="670" y="340" text-anchor="middle" font-size="10.5" font-weight="600" fill="#137333">XLA 编译 MoE 通信路径 ✨</text>
+  <text x="670" y="352" text-anchor="middle" font-size="8.5" fill="#5F6368">计算侧逐专家仍 ragged，需 grouped matmul</text>
 </svg>

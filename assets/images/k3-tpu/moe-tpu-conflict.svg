@@ -1,87 +1,106 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Google Sans, Segoe UI, sans-serif">
-  <defs>
-    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="#5F6368"/>
-    </marker>
-    <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="#EA4335"/>
-    </marker>
-    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="#34A853"/>
-    </marker>
-  </defs>
-
-  <!-- Background -->
-  <rect width="900" height="420" fill="#FAFAFA" rx="8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" font-family="Google Sans, Segoe UI, sans-serif">
+  <rect width="900" height="540" fill="#FAFAFA" rx="8"/>
 
   <!-- Title -->
-  <text x="450" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">MoE 在 TPU 上的历史矛盾与 K3 的解法</text>
+  <text x="450" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#202124">MoE 在 TPU 上的历史矛盾与 K3 的两层解法</text>
+  <text x="450" y="49" text-anchor="middle" font-size="11" fill="#5F6368">改版 2026-07-29：静态形状由系统层的 MoonEP 保证，且只到 rank 粒度</text>
 
   <!-- Left: XLA Requirement -->
-  <rect x="30" y="55" width="250" height="100" rx="8" fill="#E8F0FE" stroke="#1A73E8" stroke-width="1.5"/>
-  <text x="155" y="80" text-anchor="middle" font-size="13" font-weight="600" fill="#1A73E8">TPU / XLA 的要求</text>
-  <text x="155" y="102" text-anchor="middle" font-size="11" fill="#3C4043">所有 tensor 形状</text>
-  <text x="155" y="118" text-anchor="middle" font-size="11" fill="#3C4043">必须在编译时确定</text>
-  <text x="155" y="140" text-anchor="middle" font-size="20">🔒</text>
+  <rect x="30" y="66" width="250" height="86" rx="8" fill="#E8F0FE" stroke="#1A73E8" stroke-width="1.5"/>
+  <text x="155" y="90" text-anchor="middle" font-size="13" font-weight="600" fill="#1A73E8">TPU / XLA 的要求</text>
+  <text x="155" y="112" text-anchor="middle" font-size="11" fill="#3C4043">所有 tensor 形状</text>
+  <text x="155" y="128" text-anchor="middle" font-size="11" fill="#3C4043">必须在编译时确定</text>
 
   <!-- Right: MoE Nature -->
-  <rect x="620" y="55" width="250" height="100" rx="8" fill="#FEF7E0" stroke="#F9AB00" stroke-width="1.5"/>
-  <text x="745" y="80" text-anchor="middle" font-size="13" font-weight="600" fill="#E37400">MoE 的本性</text>
-  <text x="745" y="102" text-anchor="middle" font-size="11" fill="#3C4043">每个 expert 每 step</text>
-  <text x="745" y="118" text-anchor="middle" font-size="11" fill="#3C4043">收到的 token 数不同</text>
-  <text x="745" y="140" text-anchor="middle" font-size="20">🔀</text>
+  <rect x="620" y="66" width="250" height="86" rx="8" fill="#FEF7E0" stroke="#F9AB00" stroke-width="1.5"/>
+  <text x="745" y="90" text-anchor="middle" font-size="13" font-weight="600" fill="#E37400">MoE 的本性</text>
+  <text x="745" y="112" text-anchor="middle" font-size="11" fill="#3C4043">每个 expert 每 step</text>
+  <text x="745" y="128" text-anchor="middle" font-size="11" fill="#3C4043">收到的 token 数不同</text>
 
-  <!-- Conflict Arrow -->
-  <line x1="280" y1="105" x2="620" y2="105" stroke="#EA4335" stroke-width="2" stroke-dasharray="8,4"/>
-  <text x="450" y="98" text-anchor="middle" font-size="13" font-weight="600" fill="#EA4335">⚡ 根本矛盾 ⚡</text>
+  <!-- Conflict -->
+  <line x1="280" y1="109" x2="620" y2="109" stroke="#EA4335" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="450" y="103" text-anchor="middle" font-size="13" font-weight="600" fill="#EA4335">根本矛盾</text>
 
-  <!-- GShard Solution (middle-left) -->
-  <rect x="60" y="195" width="340" height="180" rx="8" fill="#FFF" stroke="#E8EAED" stroke-width="1"/>
-  <rect x="60" y="195" width="340" height="32" rx="8" fill="#FCE8E6"/>
-  <text x="230" y="216" text-anchor="middle" font-size="12" font-weight="600" fill="#C5221F">GShard 的妥协方案 (2020)</text>
+  <!-- ===== GShard panel ===== -->
+  <rect x="30" y="176" width="330" height="300" rx="8" fill="#FFF" stroke="#E8EAED" stroke-width="1"/>
+  <rect x="30" y="176" width="330" height="30" rx="8" fill="#FCE8E6"/>
+  <rect x="30" y="196" width="330" height="10" fill="#FCE8E6"/>
+  <text x="195" y="196" text-anchor="middle" font-size="12" font-weight="600" fill="#C5221F">GShard 的妥协 (2020)</text>
+  <text x="195" y="228" text-anchor="middle" font-size="10" fill="#5F6368">给每个 expert 预留固定容量</text>
 
-  <!-- GShard Expert Bars -->
-  <text x="80" y="252" font-size="10" fill="#5F6368">Expert 1</text>
-  <rect x="140" y="240" width="120" height="16" rx="3" fill="#34A853" opacity="0.7"/>
-  <rect x="260" y="240" width="50" height="16" rx="3" fill="#E8EAED" stroke="#DADCE0" stroke-width="0.5" stroke-dasharray="3,2"/>
-  <text x="285" y="252" text-anchor="middle" font-size="8" fill="#9AA0A6">padding</text>
+  <text x="46" y="264" font-size="10" fill="#5F6368">Expert 1</text>
+  <rect x="106" y="252" width="120" height="16" rx="3" fill="#34A853" opacity="0.7"/>
+  <rect x="226" y="252" width="50" height="16" rx="3" fill="#E8EAED" stroke="#DADCE0" stroke-width="0.5" stroke-dasharray="3,2"/>
+  <text x="251" y="264" text-anchor="middle" font-size="8" fill="#9AA0A6">padding</text>
 
-  <text x="80" y="276" font-size="10" fill="#5F6368">Expert 2</text>
-  <rect x="140" y="264" width="170" height="16" rx="3" fill="#34A853" opacity="0.7"/>
-  <rect x="310" y="264" width="30" height="16" rx="3" fill="#EA4335" opacity="0.3"/>
-  <text x="325" y="276" text-anchor="middle" font-size="8" fill="#EA4335">drop</text>
+  <text x="46" y="290" font-size="10" fill="#5F6368">Expert 2</text>
+  <rect x="106" y="278" width="170" height="16" rx="3" fill="#34A853" opacity="0.7"/>
+  <rect x="276" y="278" width="30" height="16" rx="3" fill="#EA4335" opacity="0.3"/>
+  <text x="291" y="290" text-anchor="middle" font-size="8" fill="#EA4335">drop</text>
 
-  <text x="80" y="300" font-size="10" fill="#5F6368">Expert 3</text>
-  <rect x="140" y="288" width="80" height="16" rx="3" fill="#34A853" opacity="0.7"/>
-  <rect x="220" y="288" width="90" height="16" rx="3" fill="#E8EAED" stroke="#DADCE0" stroke-width="0.5" stroke-dasharray="3,2"/>
-  <text x="265" y="300" text-anchor="middle" font-size="8" fill="#9AA0A6">padding</text>
+  <text x="46" y="316" font-size="10" fill="#5F6368">Expert 3</text>
+  <rect x="106" y="304" width="80" height="16" rx="3" fill="#34A853" opacity="0.7"/>
+  <rect x="186" y="304" width="90" height="16" rx="3" fill="#E8EAED" stroke="#DADCE0" stroke-width="0.5" stroke-dasharray="3,2"/>
+  <text x="231" y="316" text-anchor="middle" font-size="8" fill="#9AA0A6">padding</text>
 
-  <!-- GShard Stats -->
-  <text x="230" y="335" text-anchor="middle" font-size="10" fill="#EA4335">~33% 算力浪费 + 信息丢失</text>
-  <text x="230" y="352" text-anchor="middle" font-size="10" fill="#5F6368">XLA ✓（形状静态）但代价大</text>
+  <line x1="50" y1="342" x2="340" y2="342" stroke="#F1F3F4" stroke-width="1"/>
+  <text x="195" y="368" text-anchor="middle" font-size="10" fill="#EA4335">~33% 算力浪费 + 信息丢失</text>
+  <text x="195" y="388" text-anchor="middle" font-size="10" fill="#5F6368">XLA 满意（形状静态），但代价大</text>
+  <text x="195" y="424" text-anchor="middle" font-size="10" fill="#5F6368">后来的 Megablox 用 block-sparse</text>
+  <text x="195" y="440" text-anchor="middle" font-size="10" fill="#5F6368">matmul 减少浪费，但仍需运行时</text>
+  <text x="195" y="456" text-anchor="middle" font-size="10" fill="#5F6368">的 ragged 元数据</text>
 
-  <!-- K3 Solution (middle-right) -->
-  <rect x="500" y="195" width="370" height="180" rx="8" fill="#FFF" stroke="#E8EAED" stroke-width="1"/>
-  <rect x="500" y="195" width="370" height="32" rx="8" fill="#E6F4EA"/>
-  <text x="685" y="216" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">K3 Quantile Balancing (2026)</text>
+  <!-- ===== K3 two-layer panel ===== -->
+  <rect x="392" y="176" width="478" height="300" rx="8" fill="#FFF" stroke="#E8EAED" stroke-width="1"/>
+  <rect x="392" y="176" width="478" height="30" rx="8" fill="#E6F4EA"/>
+  <rect x="392" y="196" width="478" height="10" fill="#E6F4EA"/>
+  <text x="631" y="196" text-anchor="middle" font-size="12" font-weight="600" fill="#137333">K3 的两层解法 (2026)</text>
 
-  <!-- K3 Expert Bars - all equal -->
-  <text x="520" y="252" font-size="10" fill="#5F6368">Expert 1</text>
-  <rect x="585" y="240" width="140" height="16" rx="3" fill="#1A73E8" opacity="0.7"/>
-  <text x="735" y="252" font-size="10" fill="#34A853">N/E ✓</text>
+  <!-- Layer 1: QB -->
+  <rect x="406" y="216" width="450" height="104" rx="6" fill="#FEF7E0" opacity="0.55"/>
+  <text x="418" y="234" font-size="10.5" font-weight="600" fill="#E37400">算法层 · Quantile Balancing</text>
+  <text x="856" y="234" text-anchor="end" font-size="9.5" fill="#B06000">压低成本，非保证</text>
 
-  <text x="520" y="276" font-size="10" fill="#5F6368">Expert 2</text>
-  <rect x="585" y="264" width="140" height="16" rx="3" fill="#1A73E8" opacity="0.7"/>
-  <text x="735" y="276" font-size="10" fill="#34A853">N/E ✓</text>
+  <text x="418" y="256" font-size="9.5" fill="#5F6368">Expert 1</text>
+  <rect x="472" y="246" width="132" height="13" rx="3" fill="#F9AB00" opacity="0.75"/>
+  <text x="418" y="277" font-size="9.5" fill="#5F6368">Expert 2</text>
+  <rect x="472" y="267" width="146" height="13" rx="3" fill="#F9AB00" opacity="0.75"/>
+  <text x="418" y="298" font-size="9.5" fill="#5F6368">Expert 3</text>
+  <rect x="472" y="288" width="121" height="13" rx="3" fill="#F9AB00" opacity="0.75"/>
+  <text x="632" y="277" font-size="9.5" fill="#B06000">≈ 均衡</text>
+  <text x="700" y="256" font-size="9" fill="#9AA0A6">偏置来自上一批 · 直方图估计</text>
+  <text x="700" y="298" font-size="9" fill="#9AA0A6">推理时冻结 · 不保证精确相等</text>
 
-  <text x="520" y="300" font-size="10" fill="#5F6368">Expert 3</text>
-  <rect x="585" y="288" width="140" height="16" rx="3" fill="#1A73E8" opacity="0.7"/>
-  <text x="735" y="300" font-size="10" fill="#34A853">N/E ✓</text>
+  <!-- Arrow down -->
+  <text x="631" y="336" text-anchor="middle" font-size="13" fill="#5F6368">▼</text>
 
-  <!-- K3 Stats -->
-  <text x="685" y="335" text-anchor="middle" font-size="10" fill="#34A853">0% 浪费 · 零 padding · 零 drop</text>
-  <text x="685" y="352" text-anchor="middle" font-size="10" fill="#1A73E8">XLA ✓（数据本身均匀）✨</text>
+  <!-- Layer 2: MoonEP -->
+  <rect x="406" y="344" width="450" height="94" rx="6" fill="#E8F0FE" opacity="0.6"/>
+  <text x="418" y="362" font-size="10.5" font-weight="600" fill="#1A73E8">系统层 · MoonEP（动态冗余专家）</text>
+  <text x="856" y="362" text-anchor="end" font-size="9.5" fill="#174EA6">对任意路由都成立</text>
 
-  <!-- Bottom comparison arrow -->
-  <text x="450" y="405" text-anchor="middle" font-size="11" fill="#5F6368">从"骗编译器"到"数据本身就是编译器想要的形状"</text>
+  <text x="418" y="386" font-size="9.5" fill="#5F6368">Rank 0</text>
+  <rect x="472" y="376" width="60" height="13" rx="2" fill="#1A73E8" opacity="0.85"/>
+  <rect x="533" y="376" width="42" height="13" rx="2" fill="#1A73E8" opacity="0.55"/>
+  <rect x="576" y="376" width="78" height="13" rx="2" fill="#1A73E8" opacity="0.7"/>
+  <text x="666" y="386" font-size="9.5" font-weight="600" fill="#1A73E8">= S × K</text>
+
+  <text x="418" y="410" font-size="9.5" fill="#5F6368">Rank 1</text>
+  <rect x="472" y="400" width="90" height="13" rx="2" fill="#1A73E8" opacity="0.7"/>
+  <rect x="563" y="400" width="35" height="13" rx="2" fill="#1A73E8" opacity="0.85"/>
+  <rect x="599" y="400" width="55" height="13" rx="2" fill="#1A73E8" opacity="0.55"/>
+  <text x="666" y="410" font-size="9.5" font-weight="600" fill="#1A73E8">= S × K</text>
+
+  <text x="740" y="393" font-size="9" fill="#9AA0A6">总长相同 → 通信形状静态</text>
+  <text x="740" y="408" font-size="9" fill="#9AA0A6">内部分段不同 → 计算仍 ragged</text>
+
+  <text x="631" y="431" text-anchor="middle" font-size="9" fill="#5F6368">冗余专家数上界 E/R —— 有证明，且对任意路由都成立</text>
+
+  <!-- K3 conclusion -->
+  <line x1="410" y1="448" x2="852" y2="448" stroke="#F1F3F4" stroke-width="1"/>
+  <text x="631" y="466" text-anchor="middle" font-size="10.5" font-weight="600" fill="#1A73E8">rank 级形状静态 ✓ &#160;·&#160; expert 级仍 ragged，grouped matmul 依然必要</text>
+
+  <!-- Bottom -->
+  <text x="450" y="508" text-anchor="middle" font-size="11.5" fill="#3C4043">从「用 padding 骗编译器」到「用系统层保证 rank 级形状静态」</text>
+  <text x="450" y="527" text-anchor="middle" font-size="10" fill="#9AA0A6">矛盾没有被消灭，是被拆成了两半：一半彻底解决，一半被压小</text>
 </svg>
