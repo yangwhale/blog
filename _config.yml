@@ -21,6 +21,11 @@ minima:
 timezone: Asia/Hong_Kong
 permalink: /:year/:month/:day/:title/
 
+# 中文正文里的「"」会被 kramdown 智能引号误判成右引号（渲染出两个 ”）
+# 关掉替换，让引号原样输出
+kramdown:
+  smart_quotes: ["apos", "apos", "quot", "quot"]
+
 plugins:
   - jekyll-feed
   - jekyll-sitemap

@@ -134,6 +134,15 @@ blockquote {
 }
 
 // ── Tables ───────────────────────────────────────────────────────────
+// 宽表在窄视口会把最右列挤出屏幕；给每张表套一个可横向滚动的容器
+.post-content table,
+.page-content table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

@@ -2,8 +2,11 @@
 layout: post
 title: "猜想：K3 可能是最适合 TPU 的 MoE 架构 — 当极致确定性遇上极致静态编译"
 date: 2026-07-18 05:00:00 +0000
+last_modified_at: 2026-07-29 14:30:00 +0800
 categories: [tpu, moe, architecture, kimi, attention]
 lang: zh
+description: "K3 把运行时动态交还给编译期——但只在训练侧的文本 backbone 上。基于 47 页技术报告、开放权重 config 与 Tokamax PR 三个一手源，逐条核对 K3 架构与 TPU/XLA 的契合与代价。"
+image: https://cc.higcp.com/assets/imagen/A-dramatic-wide-angle-digital-20260718-053349.png
 ---
 
 <style>
@@ -61,23 +64,30 @@ lang: zh
 
 | 参数 | TPU v7 (Ironwood) | 说明 |
 |------|-------------------|------|
-| 峰值算力 | 4,611 FP8 TFLOPS / 2,306 BF16 TFLOPS | 单 chip |
-| HBM | 192 GiB HBM3e (8-Hi stacks) | 7.4 TB/s 带宽 |
-| ICI 4.0 | 5,376 Gbps (4 links × 1.34 Tb/s) | 3D Torus 拓扑 |
-| 芯片架构 | Dual-Chiplet (2 chiplet/chip) | D2D 带宽 ~8 Tb/s (6× 单 ICI link) |
-| SparseCore | 4 SC/chip (2/chiplet) | 16 tiles/SC, 2.5 MB SPMEM/SC |
-| 计算带宽比 | 623 FLOPS/byte (FP8) | 计算远快于带宽，通信优化至关重要 |
-| Superpod | 9,216 chips | 42.5 Exaflops FP8, 1.77 PB HBM |
+| 峰值算力 | **4,614** FP8 TFLOPS / **2,307** BF16 TFLOPS | 单 chip |
+| HBM | 192 GiB | 带宽 **7,380 GBps**（约 7.37 TB/s） |
+| ICI | 双向 **1,200 GBps / chip**，**200 GBps / axis** | 3D Torus 拓扑 |
+| 芯片架构 | Dual-Chiplet | 每 chiplet = 1 TensorCore + 2 SparseCore + 96 GB HBM；D2D 为**单条 ICI link 的 6 倍** |
+| SparseCore | 4 SC/chip（2/chiplet） | 官方仅公布数量；tile 数与 SPMEM 容量见下注 |
+| 计算带宽比 | **625 FLOPS/byte** (FP8) | 计算远快于带宽，通信优化至关重要 |
+| Pod | 9,216 chips | 42.5 Exaflops FP8，1.73 PiB HBM |
 
-<span class="evid evid-ext">外部资料</span> 上表数据来自 Google Cloud Ironwood 官方文档与 SemiAnalysis 的 TPU v7 分析（均见文末参考资料），不属于 K3 的一手来源。
+<span class="evid evid-ext">外部资料</span> 上表全部取自 [Google Cloud TPU7x 官方规格页](https://docs.cloud.google.com/tpu/docs/tpu7x)，不属于 K3 的一手来源。
 
-一个关键数字：**623 FLOPS/byte 的 FP8 计算带宽比**。TPU v7 的计算速度远远快于数据搬运速度——任何通信开销都会直接转化为算力浪费。这是理解后续讨论的基础。
+> **一处口径更正（2026-07-29）**：首发版这张表里的算力（4,611 / 2,306）、ICI 带宽（5,376 Gbps ÷ 4 links）、计算带宽比（623）和 HBM 总量（1.77 PB）都不准——算力是从「42.5 EF ÷ 9,216」反推的，ICI 那一行更是**整条错了**（官方是每 chip 双向 1,200 GBps、每轴 200 GBps，3D Torus 是三轴六向而非 4 links）。已全部换成官方值。<br>
+> 另有几个数字**官方文档没有公布 v7 的版本**：SparseCore 的 16 tiles/SC、2.5 MB SPMEM、SCS 标量控制器、8-wide SIMD、4/32-byte DMA 粒度——OpenXLA 的 SparseCore 文档只给了 v4 / v5p / Trillium 三列。本文后面凡涉及这些，均按机制理解使用，不作为 v7 的确切规格。
+
+一个关键数字：**625 FLOPS/byte 的 FP8 计算带宽比**（4,614 TFLOPS ÷ 7,380 GBps）。TPU v7 的计算速度远远快于数据搬运速度——任何通信开销都会直接转化为算力浪费。这是理解后续讨论的基础。
 
 ### XLA 的核心约束
 
-TPU 的灵魂是 XLA 编译器。XLA 的核心约束：**所有 tensor 形状必须在编译时确定**。
+TPU 的灵魂是 XLA 编译器。XLA 的核心约束常被概括成"所有 tensor 形状必须在编译时确定"——**这个说法需要收紧**。
 
-这和 MoE 的本性直接冲突。MoE 的 router 动态决定每个 token 去哪个 expert——每个 expert 每 step 收到的 token 数不同，All-to-All 通信的形状是**运行时才知道的**。
+<span class="evid evid-ext">外部资料</span> 更准确的表述是：**缓冲区的上界必须编译期已知，实际长度可以运行时给。** XLA 支持有界动态维度（`SetDimensionSize` / `GetDimensionSize`），JAX 也已经有 `jax.lax.ragged_all_to_all` 和 `jax.lax.ragged_dot`——MaxText 的 MoE 层就在 TPU 上用 `ragged_all_to_all`。
+
+所以"动态 All-to-All 在 TPU 上根本编译不了"是不对的。真正的代价是：**你必须按最坏情况开缓冲区**。router 动态决定每个 token 去哪个 expert，每个 expert 每 step 收到的 token 数不同——为了让形状有界，你要么 padding 到 capacity，要么在 ragged 路径上按上界预留。**上界离实际值越远，浪费越大。**
+
+（这一收紧对本文的论点其实是加强：后面会看到，MoonEP 做的正是**把上界压到恰好等于实际值**。）
 
 ### GShard 的妥协（2020）
 
@@ -94,7 +104,7 @@ expert_capacity = (total_tokens / num_experts) × capacity_factor
 
 这是一个**工程妥协**：用 padding 和 dropping 换取编译器的欢心。
 
-后来 Google 内部发展了 **Megablox Grouped MatMul**——一个 Pallas kernel 实现，将 MoE 的多个 expert matmul 重构为单个 block-sparse matmul，利用 SparseCore 的细粒度 DMA 避免 padding 浪费。但 Megablox 本质上是在"动态形状"前提下做优化——需要复杂的 metadata（token→expert 索引和 ranges），运行时开销不可忽略。
+后来 Google 内部发展了 **Megablox Grouped MatMul**——一个 Pallas kernel 实现，将 MoE 的多个 expert matmul 重构为单个 grouped matmul，用 CSR 式的 tile 元数据（`group_offsets` / `group_ids` / `m_tile_ids`）跳过空 tile，从而避免 padding 浪费。<span class="evid evid-ext">外部资料</span>（顺带更正首发版一处错误归因：读 `gmm.py` 可以看到它是**纯 TensorCore 的 Pallas kernel**，并不使用 SparseCore。）Megablox 本质上是在"形状运行时才定"的前提下做优化——需要维护这套元数据。
 
 <figure style="margin: 24px 0; text-align: center;">
 <img src="/assets/images/k3-tpu/moe-tpu-conflict.svg" alt="MoE 在 TPU 上的历史矛盾与 K3 的两层解法" style="width: 100%; max-width: 860px;" />
@@ -129,7 +139,8 @@ K3 的负载均衡容易被当成一件事（Quantile Balancing）。它其实�
 <strong>这里有一个反直觉的点，值得单独说：<code>E/R</code> 上界与路由质量无关。</strong><br><br>
 附录 E 中「定理 1 的证明」开篇第一句是：<em>"The goal is to prove that M(I) ≤ E/R holds for <strong>any</strong> router output I."</em> 证明的构造是反复挑一个欠载 rank 和一个过载 rank 对填，<em>"the process terminates after at most R − 1 fills"</em>——<strong>与路由倾斜程度完全无关</strong>。定理 2 进一步构造出使 M ≈ E/R 的极端 router 输出，说明这个界是紧的。<br><br>
 换句话说：<strong>倾斜再大，冗余专家数也被 <code>E/R</code> 硬顶住。</strong>这正是 MoonEP 相对 ECHO / UltraEP 的卖点——后者预设冗余数或设 token 上限，因而 <em>"forced to stop whenever no feasible plan exists within the cap"</em>，而 MoonEP 的预留槽位保证了 <em>"training is never interrupted"</em>。<br><br>
-所以静态形状<strong>不依赖</strong>路由算法把负载压得多平——这也是本文改版时最容易想当然写反的地方。
+所以静态形状<strong>不依赖</strong>路由算法把负载压得多平。<br><br>
+<strong>但这个保证有价格，而且不便宜。</strong>每个 rank 本来就持有 <code>E/R</code> 个 home expert，现在还要再<strong>预留 <code>E/R</code> 个冗余槽位</strong>——最坏情况下路由专家的权重内存<strong>翻倍</strong>。而定理 2 说这个界是紧的，也就是说这不是杞人忧天。<strong>"训练永不中断"这件事，是拿 HBM 换来的。</strong>
 </div>
 
 ### 算法层：Quantile Balancing 压低的是成本，不是可行性
@@ -186,11 +197,16 @@ K3 在 GPU 侧的对应做法是 group GEMM + 负载感知调度；TPU 侧的对
 
 > *each rank is filled at most once, so its remote tokens come from a single rank*
 
-也就是说，在这个构造出的均衡计划 P\* 下，**每个 rank 的远程 token 只来自一个其他 rank**——通信模式是**近似置换 / 成对交换**，而不是稠密 all-to-all。
+也就是说，在这个构造出的均衡计划 P\* 下，**每个 rank 的远程 token 只来自一个其他 rank**——通信图的**入度被限制为 1**。
 
-<span class="evid evid-guess">推断</span> 这对 TPU 是结构性利好：3D Torus 的 ICI 对成对近邻交换的映射，远好于对稠密 A2A 的映射。**这条比本文后面给出的 SparseCore 与 D2D 两条推断都更硬。**
+<div class="callout-warn">
+<strong>⚠️ 这里不要外推过头——我第一次写这一段时就外推错了。</strong>入度为 1 <strong>不等于</strong>置换。同一段的构造里明写过载 rank 可能"仍然过载、被放回过载集合"，也就是<strong>同一个源 rank 可以向多个 rank 扇出</strong>，出度不受限。所以通信图是「出星森林」，不是成对交换。<br><br>
+而扇出模式在 3D Torus 上未必比稠密 A2A 好——它反而是热点与多跳的典型形态。引理也完全不保证那个"唯一的源 rank"是物理近邻。
+</div>
 
-需要限定的是：这是**存在性证明**里的构造 P\*；报告说线上的规划内核只是 *"near-optimal"*（精确最优用 ILP 离线算作参考），未必保持单源性质。
+<span class="evid evid-guess">推断</span> 收紧后的说法是：**入度为 1 意味着规划器有做拓扑感知源选择的空间**——如果能在挑源 rank 时优先选 Torus 上的近邻，就有机会吃到局部性。但这是一个**尚未被利用的机会**，不是现成的收益。
+
+而且这是**存在性证明**里的构造 P\*；报告说线上的规划内核只是 *"near-optimal"*，未必保持单源性质。
 
 <div class="callout-takeaway">
 <strong>改版后的核心洞察</strong>：GShard 把"动态分配"视为 MoE 的固有属性，试图在不改变路由的前提下适配 XLA；Megablox 接受了这个前提，用更精巧的 kernel 减少浪费。<strong>K3 的路由仍然是 Top-k——它没有取消动态性，而是在系统层用一个带证明上界的机制把不均衡变成不可能发生。</strong><br><br>
@@ -300,7 +316,9 @@ K3 取 β₁ = 4（gate 分支）、β₂ = 25（up 分支）。`config.json` �
 **激活跑在 MXFP8 上**——这才是 SiTU 有界性直接服务的对象。`config.json` 里的 `mxfp4-pack-quantized` 是**权重侧**的打包格式（`input_activations: null`），不能用来佐证激活有界性。
 
 <div class="callout-warn">
-<strong>⚠️ 改版新增的削弱证据：MX 格式在 TPU 上没有原生 dtype。</strong><span class="evid evid-guess">推断</span> MXFP4 / MXFP8 是每 32 个元素共享一个 E8M0 指数的微缩放格式，是 Blackwell 的原生能力；TPU v7 原生支持的是 FP8，截至本文写作时 XLA:TPU 未提供 MX 系列 dtype。<strong>这意味着 K3 的开放权重不能直接喂给 TPU</strong>——需要 unpack 后重新量化，MXFP4 的存储与算力优势基本归零；想复现它的 post-training，还得自建一套 MX QAT。（这条是本文的判断，报告与 config 都没有讨论 TPU。）
+<strong>⚠️ 改版新增的削弱证据：MX 格式在 TPU 上没有原生 dtype。</strong><span class="evid evid-ext">外部资料</span> <span class="evid evid-guess">推断</span> MXFP4 / MXFP8 是每 32 个元素共享一个 E8M0 指数的微缩放格式，是 Blackwell 的原生能力。TPU v7 官方明确支持的是 FP8。<br><br>
+需要说清楚分寸：JAX 里 <code>jnp.float4_e2m1fn</code> 与 <code>jnp.float8_e8m0fnu</code>（MX 的两个构件）都存在，也有平台无关的 <code>jax.lax.scaled_dot</code>，docstring 的示例正是 <code>subchannel_size=32</code>。所以"XLA 完全没有 MX"是不对的。<br><br>
+<strong>真正没有公开依据的是：TPU v7 硬件能否原生跑 32 元素粒度的 block scaling 而不掉速。</strong><code>scaled_dot</code> 自己的文档说"延迟取决于你的平台原生支持哪些 subchannel size"，Pallas TPU 的支持 dtype 列表里也还看不到 FP8/FP4。<strong>因此保守的判断是：K3 的开放权重很可能需要 unpack 后重新量化才能高效跑在 TPU 上，MXFP4 的存储与算力优势会打折。</strong>
 </div>
 
 **对 TPU 的意义（修订后）**：SiTU-GLU 本身是 tanh + sigmoid + 逐元素乘，全部 XLA 原生，移植零障碍，数值稳定性收益 GPU 与 TPU 同等。**这一项从"待定"移入"边际收益相当"，同时它所服务的 MX 量化路径反而是一项 TPU 侧的额外成本。**
@@ -382,7 +400,7 @@ K3 的解法是直接给 log-decay 加下界：
 <strong>这是本文核心论点最有力的新证据。</strong>一个纯粹为了"让计算落回稠密矩阵乘"而做的算法改动——牺牲衰减的表达范围，换回硬件友好的计算形态。而它受益的机制在 GPU 和 TPU 上<strong>是同一个</strong>：MXU 同样只吃稠密矩阵乘，同样厌恶逐位置对的特殊路径。
 </div>
 
-<span class="evid evid-ext">外部资料</span> 这条已经在 TPU 侧落地：蚂蚁提交的 KDA Pallas kernel（[Tokamax PR #1103](https://github.com/openxla/tokamax/pull/1103)）里，原始门激活的约束就写着 `-5 ≤ lower_bound < 0`。
+<span class="evid evid-ext">外部资料</span> 这条已经有 TPU 侧的公开实现提交：蚂蚁提交的 KDA Pallas kernel（[Tokamax PR #1103](https://github.com/openxla/tokamax/pull/1103)，+10,736 行 / 16 文件）里，原始门激活的约束就写着 `-5 ≤ lower_bound < 0`。**注意该 PR 截至 2026-07-29 仍是 open、未合并。**
 
 #### 改版新增：NoPE
 
@@ -466,11 +484,11 @@ K3 的对策是改用 WarpDecode 的 **token-centric** 设计：每个 warp 负�
 
 > *large images and long videos substantially increase the computation time of the vision encoder and cause **significant load imbalance across devices**. ... A single large image is partitioned along the patch dimension across multiple devices, and attention is computed by gathering key–value pairs (gather-KV) across CP ranks. In addition, we divide each CP group into several sub-CP groups and distribute multiple large images across them in a load-balanced manner.*
 
-<span class="evid evid-guess">推断</span> **这是 K3 里唯一一处真正无法交还给编译期的动态性。** 每个样本的视觉 token 数取决于图像分辨率和视频长度，本质上是数据相关的。K3 的做法是**把这个动态性接住**（动态 CP + 子组负载均衡 + 塞进 PP bubble），而不是消除它。
+<span class="evid evid-guess">推断</span> **这是 K3 里唯一一处连训练侧都交不回编译期的动态性。** 每个样本的视觉 token 数取决于图像分辨率和视频长度，本质上是数据相关的。（推理侧还有两处：投机解码的接受长度、以及 KDA 前缀缓存那套运行时内存管理——都在文本 backbone 内，见第七重。）K3 的做法是**把这个动态性接住**（动态 CP + 子组负载均衡 + 塞进 PP bubble），而不是消除它。
 
 在 TPU 上，这意味着两条路：要么按分辨率分桶 + padding（浪费算力，且桶数多会触发反复重编译），要么在 XLA 里实现变长 CP——后者正是 XLA 最难的一类工作。
 
-**因此本文的核心主张必须加限定：K3 把动态性交还给编译期，这件事发生在文本 backbone 上；多模态支线不在其内。** 如果只做纯文本训练，这一节可以忽略；如果要复现 K3 的原生多模态能力，这是移植路径上一块独立且不小的工程。
+**因此本文的核心主张必须加两层限定：K3 把动态性交还给编译期，这件事发生在<u>训练侧的文本 backbone</u> 上。多模态支线不在其内；推理侧 K3 自己也在"接住"动态性，而不是消除它。** 如果只做纯文本训练，这一节可以忽略；如果要复现 K3 的原生多模态能力，这是移植路径上一块独立且不小的工程。
 
 ---
 
@@ -546,7 +564,7 @@ b_next = b_next - b_next.mean()                # 减均值不改变 Top-k 结果
 
 ### 第二层：已经有人写了（KDA kernel 的一种 regime）
 
-<span class="evid evid-meas">已实测</span> 蚂蚁已向 OpenXLA Tokamax 提交完整 TPU 实现（[PR #1103](https://github.com/openxla/tokamax/pull/1103)，约 1.07 万行）——XLA 递归参考实现 + Pallas 分块前向 + custom-VJP 反向 + 变长打包 + 序列维 Context Parallelism + autotuning 注册。
+<span class="evid evid-meas">已实测</span> 蚂蚁已向 OpenXLA Tokamax 提交完整 TPU 实现（[PR #1103](https://github.com/openxla/tokamax/pull/1103)，+10,736 行 / 16 文件，**截至 2026-07-29 仍未合并**）——XLA 递归参考实现 + Pallas 分块前向 + custom-VJP 反向 + 变长打包 + 序列维 Context Parallelism + autotuning 注册。
 
 其中的 CP 方案与报告 §5.1.2 的 **KDA Context Parallelism** 是同一个算法：每个 rank 本地折叠出仿射摘要（累积转移矩阵 `M` 与从零起算的状态 `S̃`），一次 all-gather 交换这两个**固定大小**的张量，再用前缀扫描重建各 rank 的入口状态——**通信量与序列长度无关**。这是线性注意力相对 softmax attention 在 CP 上的结构性优势。
 
@@ -584,9 +602,9 @@ b_next = b_next - b_next.mean()                # 减均值不改变 Top-k 结果
 
 <span class="evid evid-guess">推断</span> 好消息是 TPU 这一侧有三个结构性优势可以利用：
 
-1. **附录 E 的单源引理**——均衡计划下每个 rank 的远程 token 只来自一个 rank，通信是近似置换。3D Torus 对成对交换的映射远好于稠密 A2A。（限定：这是存在性证明的构造，线上规划器只是 near-optimal。）
+1. **附录 E 的单源引理**——均衡计划下每个 rank 的远程 token 入度为 1，给拓扑感知的源选择留了空间（**注意出度不受限，不是置换**，见上文修订）。限定：这是存在性证明的构造，线上规划器只是 near-optimal。
 2. **SparseCore** 本来就是为细粒度 DMA 和独立控制线程设计的，规划内核与直方图 `scatter_add` 都可以 offload。
-3. **Dual-chiplet 的 D2D 带宽约 8 Tb/s**（6× 单 ICI link），把同 chip 的两个 chiplet 分给相邻 expert group，可以让一部分 dispatch 走片内高带宽。
+3. **Dual-chiplet 的 D2D 是单条 ICI link 的 6 倍**（官方表述），把同 chip 的两个 chiplet 分给相邻 expert group，可以让一部分 dispatch 走片内高带宽。
 
 坏消息是这三条都还没有人验证过。
 
@@ -656,11 +674,12 @@ K3 走了一条不同的路。**但它问的问题比"消灭动态性"更克制*
 - [Kimi K3 开放权重](https://huggingface.co/moonshotai/Kimi-K3) — `config.json` 是所有架构参数的一手来源
 - [Tokamax PR #1103: KDA Pallas Kernel](https://github.com/openxla/tokamax/pull/1103) — 目前公开可见的 KDA 算子 TPU 实现（仅覆盖训练/prefill 一种 regime），含 CP 实测
 - [MoonEP](https://github.com/MoonshotAI/MoonEP) — K3 的 EP 调度方案。本文对它的判断来自技术报告 §5.2.1 与附录 E，未逐行读过该仓库代码
-- [OpenXLA SparseCore 深度指南](https://openxla.org/xla/sparsecore) — SparseCore 架构与 Collective Offloading 官方文档
-- [Google Cloud TPU v7 (Ironwood) 文档](https://cloud.google.com/tpu/docs/ironwood-performance) — 性能优化与硬件规格
+- [OpenXLA SparseCore 深度指南](https://openxla.org/xla/sparsecore) — SparseCore 架构（面向 Large Embedding Models；规格表只覆盖 v4 / v5p / Trillium，未含 v7）
+- [Google Cloud TPU7x 官方规格](https://docs.cloud.google.com/tpu/docs/tpu7x) — 本文 TPU v7 硬件规格表的唯一来源
+- [Ironwood 性能优化指南](https://docs.cloud.google.com/tpu/docs/ironwood-performance) — Collective Offloading 与 dual-chiplet 优化建议
 - [GShard: Scaling Giant Models with Conditional Computation](https://arxiv.org/abs/2006.16668) — capacity_factor 的起源
 - [Megablox GMM Pallas Kernel](https://github.com/jax-ml/jax/blob/main/jax/experimental/pallas/ops/tpu/megablox/gmm.py) — TPU 上 MoE ragged batch 的 block-sparse 实现
-- [SemiAnalysis: TPU v7 分析](https://newsletter.semianalysis.com/p/tpuv7-google-takes-a-swing-at-the) — SparseCore SCS/SCT 架构细节
+- [SemiAnalysis: TPU v7 分析](https://newsletter.semianalysis.com/p/tpuv7-google-takes-a-swing-at-the) — SparseCore SCS / SCT 架构细节（二手来源，官方文档未公布 v7 的这些字段）
 - [Kimi Linear: An Expressive, Efficient Attention Architecture](https://arxiv.org/abs/2510.26692) — KDA 的前身，K3 下界衰减改动的对照基线
 - [DeepSeek-V3](https://arxiv.org/abs/2412.19437) — aux-loss-free 路由的来源，K3 的 Quantile Balancing 与它同属一族
 - [JAX Pallas TPU paged attention](https://github.com/jax-ml/jax/tree/main/jax/experimental/pallas/ops/tpu/paged_attention) — 用于更正首发版"TPU 做不到 PagedAttention"的说法
